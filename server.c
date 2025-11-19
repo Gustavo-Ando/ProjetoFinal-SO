@@ -18,12 +18,12 @@
 #include "map.h"
 
 #define PORT 8080
-#define BUFFER_SIZE 1024
 #define MAX_CLIENTS 4
 
 typedef struct _client {
     int socket;
     int x, y;
+    enum Item_type item;
 } CLIENT;
 
 void fail(char *str){
@@ -71,7 +71,7 @@ static void broadcast_player_connection(int index){
 
 }
 
-// Thread to send updates to the players when they move
+// Send updates to the players when they move
 static void broadcast_player_position(int index){
     pthread_mutex_lock(&clients_mutex);
     char message[MESSAGE_SIZE];
@@ -86,6 +86,20 @@ static void broadcast_player_position(int index){
     pthread_mutex_unlock(&clients_mutex);
 }
 
+// Send update to players when player item updates
+static void broadcast_player_item(int index){
+    pthread_mutex_lock(&clients_mutex);
+    char message[MESSAGE_SIZE];
+    // Create message for the given client informing its status
+    msgS_item(message, index, clients[index].item);
+    for(int i = 0; i < MAX_CLIENTS; i++){
+        // Send it to all connected players
+        if(clients[i].socket != 0) {
+            if(send(clients[i].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
+}
 // Thread to deal with master_socket (accept new connections)
 static void *read_master_socket(void *args){
     int master_socket = *(int*)args;
@@ -122,6 +136,7 @@ static void *read_master_socket(void *args){
             // Defines initial position
             clients[i].x = 6;
             clients[i].y = 5;
+            clients[i].item = NONE;
             new_index = i;
             connected++;
             printf(" - Adding socket as %d\n\n", i);
@@ -132,6 +147,7 @@ static void *read_master_socket(void *args){
         send_game_state(new_index);
         broadcast_player_connection(new_index);
         broadcast_player_position(new_index);
+        broadcast_player_item(new_index);
     }
 
     return NULL;
@@ -141,32 +157,47 @@ static void treat_client_input(char input, int index){
     // Access CR
     pthread_mutex_lock(&clients_mutex);
     // Deals with the movements
-    int try_moved = 1;
+    int try_moved = 0, try_action = 0;
     switch(input) {
         case 'w':
+            try_moved = 1;
             if(!(game_map[clients[index].y - 1][clients[index].x])) 
                 clients[index].y--;
             break;
         case 'a':
+            try_moved = 1;
             if(!(game_map[clients[index].y][clients[index].x - 2])) 
                 clients[index].x -= 2;
             break;
         case 's':
+            try_moved = 1;
             if(!(game_map[clients[index].y + 1][clients[index].x])) 
                 clients[index].y++;
             break;
         case 'd':
+            try_moved = 1;
             if(!(game_map[clients[index].y][clients[index].x + 2])) 
                 clients[index].x += 2;
             break;
+        case ' ':
+            try_action = 1;
+            // Get item
+            if(item_map[clients[index].y][clients[index].x] != NONE && clients[index].item == NONE){
+                clients[index].item = item_map[clients[index].y][clients[index].x];
+            }
+            // Trash item
+            if(trash_map[clients[index].y][clients[index].x]){
+                clients[index].item = NONE;
+            }
+            break;
         default:
-            try_moved = 0;
             break;
     }
     printf("Received input from client %d: %c\n", index, input);
     printf(" - %d, %d\n", clients[index].x, clients[index].y);
     pthread_mutex_unlock(&clients_mutex);
     if(try_moved) broadcast_player_position(index);
+    if(try_action) broadcast_player_item(index);
 }
 
 // Thread to deal with messages received from the clients

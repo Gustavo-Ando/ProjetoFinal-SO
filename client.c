@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,7 +15,6 @@
 #include "map.h"
 
 #define PORT 8080
-#define BUFFER_SIZE 1024
 
 char buffer_send[64];
 int buffer_send_size = 0;
@@ -25,6 +23,8 @@ pthread_mutex_t buffer_send_mutex;
 // Struct with players' position and status
 typedef struct _player {
     int x, y;
+    int last_x, last_y;
+    enum Item_type item;
     int is_active;
 } PLAYER;
 
@@ -51,8 +51,8 @@ static void *curses(void *arg){
     // get window size
     int width, height;
     getmaxyx(stdscr, height, width);
-    int start_x = (width - 19)/2;
-    int start_y = (height - 10)/2;
+    int start_x = (width - MAP_WIDTH)/2;
+    int start_y = (height - MAP_HEIGHT)/2;
 
     // If the terminal has colors, set them
     if(has_colors()){
@@ -68,11 +68,14 @@ static void *curses(void *arg){
         init_pair(5, COLOR_RED, -1); // Oven
 
         // Itens
-        init_pair(10, COLOR_RED, -1); // Hamburger
-        init_pair(11, COLOR_YELLOW, -1); // French Fries
-        init_pair(12, COLOR_GREEN, -1); // Salad
-        init_pair(13, COLOR_CYAN, -1); // Juice
-        init_pair(14, COLOR_YELLOW, -1); // Bread
+        init_pair(10, COLOR_YELLOW, -1); // Bread
+        init_pair(11, COLOR_RED, -1); // Hamburger
+        init_pair(12, COLOR_BLACK, -1); // Hamburger Burned
+        init_pair(13, COLOR_YELLOW, -1); // Hamburger Ready
+        init_pair(14, COLOR_GREEN, -1); // Salad
+        init_pair(15, COLOR_CYAN, -1); // Juice
+        init_pair(16, COLOR_YELLOW, -1); // French Fries
+        init_pair(17, COLOR_BLACK, -1); // French Fries Burned
 
         // Numbers
         init_pair(20, COLOR_BLACK, COLOR_WHITE); // Default
@@ -94,8 +97,8 @@ static void *curses(void *arg){
     while(k != '\n') {
         erase();
         // Render map
-        for(int line = 0; line < 10; line++){
-            for(int col = 0; col < 19; col++){
+        for(int line = 0; line < MAP_HEIGHT; line++){
+            for(int col = 0; col < MAP_WIDTH; col++){
                 attron(COLOR_PAIR(color_map[line][col]) | attr_map[line][col]);
                 mvaddch(start_y+line, start_x+col, map[line][col]);
                 attroff(COLOR_PAIR(color_map[line][col]) | attr_map[line][col]);
@@ -104,10 +107,26 @@ static void *curses(void *arg){
         // Update player's position
         pthread_mutex_lock(&players_mutex);
         for(int i = 0; i < 4; i++){
-            if(players[i].is_active) {
-                attron(COLOR_PAIR(30 + 1 + i));
+            if(players[i].is_active){
+                attron(COLOR_PAIR(30 + 1 + i) | A_BOLD);
                 mvaddch(start_y+players[i].y, start_x+players[i].x, player_char[i]);
-                attroff(COLOR_PAIR(30 + 1 + i));
+                attroff(COLOR_PAIR(30 + 1 + i) | A_BOLD);
+                if(players[i].item != NONE) {
+                    int color_index;
+                    switch(players[i].item){
+                        case PAO: color_index = 10; break;
+                        case HAMBURGUER: color_index = 11; break;
+                        case HAMBURGUER_QUEIMADO: color_index = 12; break;
+                        case HAMBURGUER_PRONTO: color_index = 13; break;
+                        case SALADA: color_index = 14; break;
+                        case SUCO: color_index = 15; break;
+                        case BATATA: color_index = 16; break;
+                        case BATATA_QUEIMADA: color_index = 17; break;
+                    }
+                    attron(COLOR_PAIR(color_index));
+                    mvaddch(start_y + players[i].last_y, start_x + players[i].last_x, players[i].item);
+                    attroff(COLOR_PAIR(color_index));
+                }
             }
         }
         pthread_mutex_unlock(&players_mutex);
@@ -125,6 +144,7 @@ static void *curses(void *arg){
         if(k != ERR){
             // Access CR and add content to the buffer
             pthread_mutex_lock(&buffer_send_mutex);
+            if(buffer_send_size >= 64 - 1) fail("Input buffer full");
             buffer_send[buffer_send_size++] = k;
             pthread_mutex_unlock(&buffer_send_mutex);
         }
@@ -132,11 +152,33 @@ static void *curses(void *arg){
     return NULL;
 }
 
-static void process_message_movement(char *message){
-    // Access CR and update the given player's position
+static void process_message_item(char *message){
     pthread_mutex_lock(&players_mutex);
-    players[msgS_movement_get_player_index(message)].x = msgS_movement_get_x(message);
-    players[msgS_movement_get_player_index(message)].y = msgS_movement_get_y(message);
+    int index = msgS_item_get_player_index(message);
+    enum Item_type item = msgS_item_get_item_type(message);
+    players[index].item = item;
+    pthread_mutex_unlock(&players_mutex);
+    
+    pthread_mutex_lock(&debug_mutex);
+    sprintf(debug[current_debug_line], "ITEM %d:%c", index, item);
+    current_debug_line = (current_debug_line + 1) % 10;
+    pthread_mutex_unlock(&debug_mutex);
+}
+
+static void process_message_movement(char *message){
+    // Access CR and update the given player's item
+    pthread_mutex_lock(&players_mutex);
+    int index = msgS_movement_get_player_index(message), x = msgS_movement_get_x(message), y = msgS_movement_get_y(message);
+    if(x != players[index].x || y != players[index].y){
+        players[index].last_x = players[index].x;
+        players[index].last_y = players[index].y;
+        players[index].x = x;
+        players[index].y = y;
+        if(players[index].last_x == -1 || players[index].last_y == -1){
+            players[index].last_x = x;
+            players[index].last_y = y;
+        }
+    }
     pthread_mutex_unlock(&players_mutex);
 }
 
@@ -168,6 +210,7 @@ static void *socket_read_thread(void *arg){
             switch(msg_get_type(buffer + current_index)){
                 case MOVEMENT:  process_message_movement(buffer + current_index); break;
                 case PLAYERS:  process_message_players(buffer + current_index); break;
+                case ITEM: process_message_item(buffer + current_index); break;
                 // If there are no more messages, end the loop
                 default: buffer[current_index] = '\0';  break;
             }
@@ -215,6 +258,9 @@ int main(int argc, char **argv){
         players[i].is_active = 0;
         players[i].x = -1;
         players[i].y = -1;
+        players[i].last_x = -1;
+        players[i].last_y = -1;
+        players[i].item = NONE;
     }
 
     for(int i = 0; i < 10; i++){
@@ -253,3 +299,4 @@ int main(int argc, char **argv){
     close(client_fd);
     return 0;
 }
+
