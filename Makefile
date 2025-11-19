@@ -1,3 +1,3 @@
 all:
-	gcc client.c -std=c99 -Wall -o client.out -lcurses
-	gcc server.c -std=c99 -Wall -o server.out
+	gcc client.c message.c -std=c99 -Wall -o client.out -lcurses
+	gcc server.c message.c -std=c99 -Wall -o server.out

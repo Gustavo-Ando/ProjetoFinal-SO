@@ -12,6 +12,9 @@
 
 #include <unistd.h>
 
+#include "message.h"
+#include "map.h"
+
 #define PORT 8080
 #define BUFFER_SIZE 1024
 
@@ -29,6 +32,10 @@ PLAYER players[4];
 int num_players = 0;
 pthread_mutex_t players_mutex;
 
+char debug[10][20];
+int current_debug_line = 0;
+pthread_mutex_t debug_mutex;
+
 // Function to treat errors
 void fail(char *str){
     perror(str);
@@ -36,47 +43,6 @@ void fail(char *str){
 }
 
 static void *curses(void *arg){
-    // Game map
-    char map[10][19] = {
-        "########n#n########",
-        "##x|  \\ O O /  (@)#",
-        "## |              #",
-        "## |             []",
-        "## |             []",
-        "## |             []",
-        "#                []",
-        "#                 #",
-        "#(U)  /\"0\"0\"\\  (=)#",
-        "########n#n########"
-    };
-
-    // Map with the attr of each char
-    int attr_map[10][19] = {
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, A_UNDERLINE, A_BOLD, 0, 0, 0, A_UNDERLINE, A_UNDERLINE, A_UNDERLINE, A_UNDERLINE, A_UNDERLINE, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, A_UNDERLINE, A_BOLD, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, A_UNDERLINE, A_BOLD, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, A_UNDERLINE, A_BOLD, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, A_UNDERLINE, A_BOLD, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    };
-    // Map with the color codes of each char
-    int color_map[10][19] = {
-        {1, 1, 1, 1, 1, 1, 1, 1, 20, 1, 20, 1, 1, 1, 1, 1, 1, 1, 1},
-        {1, 1, 2, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 12, 0, 1},
-        {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-        {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3},
-        {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4},
-        {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3},
-        {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4},
-        {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-        {1, 0, 13, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 14, 0, 1},
-        {1, 1, 1, 1, 1, 1, 1, 1, 20, 1, 20, 1, 1, 1, 1, 1, 1, 1, 1}
-    };
-
     initscr(); // Start curses
     curs_set(0); // Disable cursor
     noecho(); // Disable echo (don't write input to screen)
@@ -92,10 +58,11 @@ static void *curses(void *arg){
     if(has_colors()){
         start_color();
         use_default_colors();
+
         // Buildings
-        init_pair(0, COLOR_WHITE, -1); // Deafault
+        init_pair(0, COLOR_WHITE, -1); // Default
         init_pair(1, COLOR_WHITE, COLOR_WHITE); // Walls
-        init_pair(2, COLOR_BLACK , COLOR_RED); // Trash
+        init_pair(2, COLOR_RED , -1); // Trash
         init_pair(3, COLOR_WHITE, COLOR_BLUE); // Plates 1
         init_pair(4, COLOR_WHITE, COLOR_CYAN); // Plates 2
         init_pair(5, COLOR_RED, -1); // Oven
@@ -112,8 +79,8 @@ static void *curses(void *arg){
         init_pair(21, COLOR_YELLOW, COLOR_WHITE); // Warning
         init_pair(22, COLOR_RED, COLOR_WHITE); // Emergency
 
-        // Players/Clients
-        init_pair(30, COLOR_WHITE, -1); // Clients
+        // Players/Customers
+        init_pair(30, COLOR_WHITE, -1); // Customers
         init_pair(31, COLOR_RED, -1); // P1
         init_pair(32, COLOR_BLUE, -1); // P2
         init_pair(33, COLOR_GREEN, -1); // P3
@@ -144,6 +111,14 @@ static void *curses(void *arg){
             }
         }
         pthread_mutex_unlock(&players_mutex);
+        // Debug
+        pthread_mutex_lock(&debug_mutex);
+        for(int i = 0; i < 10; i++){
+            if((current_debug_line + 10 - 1)%10== i) attron(COLOR_PAIR(5));
+            mvprintw(i, 0, "%.20s", debug[i]);
+            if((current_debug_line + 10 - 1)%10== i) attroff(COLOR_PAIR(5));
+        }
+        pthread_mutex_unlock(&debug_mutex);
         refresh();
 
         k = getch();
@@ -157,27 +132,46 @@ static void *curses(void *arg){
     return NULL;
 }
 
+static void process_message_movement(char *message){
+    // Access CR and update the given player's position
+    pthread_mutex_lock(&players_mutex);
+    players[msgS_movement_get_player_index(message)].x = msgS_movement_get_x(message);
+    players[msgS_movement_get_player_index(message)].y = msgS_movement_get_y(message);
+    pthread_mutex_unlock(&players_mutex);
+}
+
+static void process_message_players(char *message){
+    pthread_mutex_lock(&debug_mutex);
+    sprintf(debug[current_debug_line], "CON %d:%d.", msgS_players_get_player_index(message), msgS_players_get_status(message));
+    current_debug_line = (current_debug_line + 1) % 10;
+    pthread_mutex_unlock(&debug_mutex);
+
+    // Access CR and update the given player's status, updating number of players in the game
+    pthread_mutex_lock(&players_mutex);
+    players[msgS_players_get_player_index(message)].is_active = msgS_players_get_status(message);
+    if(msgS_players_get_status(message) == 1) num_players++;
+    else num_players--;
+    pthread_mutex_unlock(&players_mutex);
+}
+
 static void *socket_read_thread(void *arg){
     int client_fd = *(int*)arg;
-    char buffer[BUFFER_SIZE + 1] = {0};
-    // Receives a message from the server
+    char buffer[MESSAGE_SIZE + 1] = {0};
+    // Receive a message from the server
     while(1){
-        read(client_fd, buffer, BUFFER_SIZE);
-        if(buffer[0] >= '0' && buffer[0] < '4') {
-            pthread_mutex_lock(&players_mutex);
-            if(buffer[1] == ('0' - 1)) {
-                players[buffer[0] - '0'].is_active = 0;
-                num_players--;
+        // Read the buffer
+        int read_length = read(client_fd, buffer, MESSAGE_SIZE);
+        buffer[read_length] = '\0';
+        int current_index = 0;
+        while(current_index < MESSAGE_SIZE && current_index < read_length && buffer[current_index] != '\0'){
+            // Update the current index given the message type (different sizes)
+            switch(msg_get_type(buffer + current_index)){
+                case MOVEMENT:  process_message_movement(buffer + current_index); break;
+                case PLAYERS:  process_message_players(buffer + current_index); break;
+                // If there are no more messages, end the loop
+                default: buffer[current_index] = '\0';  break;
             }
-            else {
-                if(players[buffer[0] - '0'].is_active == 0) {
-                    num_players++;
-                    players[buffer[0] - '0'].is_active = 1;
-                }
-                players[buffer[0] - '0'].x = buffer[1] - '0';
-                players[buffer[0] - '0'].y = buffer[2] - '0';
-            }
-            pthread_mutex_unlock(&players_mutex);
+            current_index += msg_get_size(buffer + current_index);
         }
     }
     return NULL;
@@ -185,7 +179,7 @@ static void *socket_read_thread(void *arg){
 
 static void *socket_write_thread(void *arg){
     int client_fd = *(int *)arg;
-    char message[BUFFER_SIZE + 1] = { 0 };
+    char message[MESSAGE_SIZE] = { 0 };
 
     // Repeat
     while(1) {
@@ -194,13 +188,17 @@ static void *socket_write_thread(void *arg){
         pthread_mutex_lock(&buffer_send_mutex);
         // If there is key on buffer, remove and add to message
         if(buffer_send_size >= 1) {
-            message[0] = buffer_send[--buffer_send_size];
-            message[1] = '\0';
+            msgC_input(message, buffer_send[0]);
+            // Shift the buffer to get next key
+            for(int i = 0; i < buffer_send_size - 1; i++){
+                buffer_send[i] = buffer_send[i + 1];
+            }
+            buffer_send_size--;
             to_send = 1;
         }
         pthread_mutex_unlock(&buffer_send_mutex);
 
-        // If there is a msg to send, sends after leaving CR
+        // If there is a msg to send, send after leaving CR
         if(to_send) send(client_fd, message, strlen(message), 0);
 
     }
@@ -212,23 +210,33 @@ int main(int argc, char **argv){
     int client_fd = socket(AF_INET, SOCK_STREAM, 0);
     if(client_fd < 0) fail("Error creating socket\n");
 
+    // Initialize all players
     for(int i = 0; i < 4; i++){
         players[i].is_active = 0;
         players[i].x = -1;
         players[i].y = -1;
     }
+
+    for(int i = 0; i < 10; i++){
+        debug[i][0] = '\0';
+    }
     
-    // Creates the address struct and fills it
+    // Create the address struct and fill it
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(PORT);
 
-    // Converts the addr to binary
+    // Convert the addr to binary
     if(inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr) <= 0) fail("IP address error\n");
 
-    // Connects client and server
+    // Connect client and server
     int status = connect(client_fd, (struct sockaddr*)&server_addr, sizeof(server_addr));
     if(status < 0) fail("Connection error\n");
+
+    // Send a message confirming the connection
+    char message[MESSAGE_SIZE];
+    msgC_connection(message, 1);
+    send(client_fd, message, strlen(message), 0);
 
     // Create threads to send and receive data
     pthread_t read_thr, write_thr, curses_thr;

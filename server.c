@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,9 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/time.h>
+
+#include "message.h"
+#include "map.h"
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
@@ -33,24 +37,53 @@ pthread_mutex_t clients_mutex;
 
 struct sockaddr_in address;
 
-// Thread to send updates to the players when they move
-static void send_player_update(int index){
+static void send_game_state(int index){
+    // Access CR
     pthread_mutex_lock(&clients_mutex);
-    char message[BUFFER_SIZE + 1] = { 0 };
-    message[0] = '0' + index;
-    message[1] = '0' + clients[index].x;
-    message[2] = '0' + clients[index].y;
-    if(clients[index].socket == 0) {
-        message[1] = '0' - 1;
-        message[2] = '\0';
-    }
+    char message[MESSAGE_SIZE];
     for(int i = 0; i < MAX_CLIENTS; i++){
+        // Create a message for all clients informing their status (connected or not)
+        msgS_players(message, i, clients[i].socket != 0);
+        // Send and check if succesful
+        if(send(clients[index].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
+        // Create and send a message with connected players' position
+        if(clients[i].socket != 0) {
+            msgS_movement(message, i, clients[i].x, clients[i].y);
+            if(send(clients[index].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
+}
+
+static void broadcast_player_connection(int index){
+    // Access CR
+    pthread_mutex_lock(&clients_mutex);
+    char message[MESSAGE_SIZE];
+    //Create a message for the given client informing its status
+    msgS_players(message, index, clients[index].socket != 0);
+    for(int i = 0; i < MAX_CLIENTS; i++){
+        // Send it to all connected players
         if(clients[i].socket != 0) {
             if(send(clients[i].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
         }
     }
     pthread_mutex_unlock(&clients_mutex);
 
+}
+
+// Thread to send updates to the players when they move
+static void broadcast_player_position(int index){
+    pthread_mutex_lock(&clients_mutex);
+    char message[MESSAGE_SIZE];
+    // Create message for the given client informing its status
+    msgS_movement(message, index, clients[index].x, clients[index].y);
+    for(int i = 0; i < MAX_CLIENTS; i++){
+        // Send it to all connected players
+        if(clients[i].socket != 0) {
+            if(send(clients[i].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
 }
 
 // Thread to deal with master_socket (accept new connections)
@@ -80,16 +113,13 @@ static void *read_master_socket(void *args){
             continue;
         }
         
-        // Otherwise, send a confirmation message
-        char *message = "Connection established";
-        if(send(new_socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
-
         // Access CR to increase number of connected clients and add client to the list
         pthread_mutex_lock(&clients_mutex);
         int new_index;
         for(int i = 0; i < MAX_CLIENTS; i++){
             if(clients[i].socket != 0) continue;
             clients[i].socket = new_socket;
+            // Defines initial position
             clients[i].x = 6;
             clients[i].y = 5;
             new_index = i;
@@ -98,10 +128,45 @@ static void *read_master_socket(void *args){
             break;
         }
         pthread_mutex_unlock(&clients_mutex);
-        send_player_update(new_index);
+        
+        send_game_state(new_index);
+        broadcast_player_connection(new_index);
+        broadcast_player_position(new_index);
     }
 
     return NULL;
+}
+
+static void treat_client_input(char input, int index){
+    // Access CR
+    pthread_mutex_lock(&clients_mutex);
+    // Deals with the movements
+    int try_moved = 1;
+    switch(input) {
+        case 'w':
+            if(!(game_map[clients[index].y - 1][clients[index].x])) 
+                clients[index].y--;
+            break;
+        case 'a':
+            if(!(game_map[clients[index].y][clients[index].x - 2])) 
+                clients[index].x -= 2;
+            break;
+        case 's':
+            if(!(game_map[clients[index].y + 1][clients[index].x])) 
+                clients[index].y++;
+            break;
+        case 'd':
+            if(!(game_map[clients[index].y][clients[index].x + 2])) 
+                clients[index].x += 2;
+            break;
+        default:
+            try_moved = 0;
+            break;
+    }
+    printf("Received input from client %d: %c\n", index, input);
+    printf(" - %d, %d\n", clients[index].x, clients[index].y);
+    pthread_mutex_unlock(&clients_mutex);
+    if(try_moved) broadcast_player_position(index);
 }
 
 // Thread to deal with messages received from the clients
@@ -117,10 +182,11 @@ static void *read_client_socket(void *args){
         if(sd == 0) continue;
         // If exists, treat client until it disconnects
         while(1){
-            char buffer[BUFFER_SIZE + 1];
-            int valread = read(sd, buffer, BUFFER_SIZE);
-    
-            if(valread == 0) {
+            char buffer[MESSAGE_SIZE + 1];
+            int read_length = read(sd, buffer, MESSAGE_SIZE);
+            buffer[read_length] = '\0';
+            
+            if(read_length == 0) {
                 // Disconnected
                 getpeername(sd, (struct sockaddr *)&address, (socklen_t *)&addr_len);
                 printf("Host disconnected.\n");
@@ -132,52 +198,22 @@ static void *read_client_socket(void *args){
                 clients[index].socket = 0;
                 connected--;
                 pthread_mutex_unlock(&clients_mutex);
-                send_player_update(index);
+                broadcast_player_connection(index);
                 break;
             } else {
-                // Game map with blocked spaces
-                int game_map[10][19] = {
-                    {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-                    {1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1},
-                    {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-                    {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-                    {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-                    {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-                    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-                    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-                    {1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1},
-                    {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
-                };
-                // Treat Received message
-                pthread_mutex_lock(&clients_mutex);
-                // Deals with the movements
-                int try_moved = 1;
-                switch(buffer[0]) {
-                    case 'w':
-                        if(!(game_map[clients[index].y - 1][clients[index].x])) 
-                            clients[index].y--;
-                        break;
-                    case 'a':
-                        if(!(game_map[clients[index].y][clients[index].x - 2])) 
-                            clients[index].x -= 2;
-                        break;
-                    case 's':
-                        if(!(game_map[clients[index].y + 1][clients[index].x])) 
-                            clients[index].y++;
-                        break;
-                    case 'd':
-                        if(!(game_map[clients[index].y][clients[index].x + 2])) 
-                            clients[index].x += 2;
-                        break;
-                    default:
-                        try_moved = 0;
-                        break;
+                // Treat input
+                int current_index = 0;
+                while(current_index < MESSAGE_SIZE && current_index < read_length && buffer[current_index] != '\0'){
+                    switch(msg_get_type(buffer + current_index)){
+                        case INPUT:
+                            treat_client_input(msgC_input_get_input(buffer + current_index), index);
+                            break;
+                        default:
+                            buffer[current_index] = '\0';
+                            break;
+                    } 
+                    current_index += msg_get_size(buffer + current_index);
                 }
-                printf("Received message from client %d: %s\n", index, buffer);
-                printf(" - %d, %d\n", clients[index].x, clients[index].y);
-                pthread_mutex_unlock(&clients_mutex);
-                if(try_moved) send_player_update(index);
-                
             }
         }
     }
@@ -227,34 +263,3 @@ int main(int argc, char** argv){
     
     return 0;
 }
-
-
-/*
-    Hamburgueria:
-        * Hamburger: -
-        * Hamburger queimado: ~
-        * Pão: =
-        * Hamburguer com pão: ≡ E
-        * Salada: @
-        * Refri: Ú 
-        * Batata frita: W
-        * Batata frita queimada: M
-
-*/
-
-/*
-
-                   (Batata Frita)
-                ########5#5########
-         (Lixo) ##X|  \_O_W_/  (@)# (Salada)
-                ##_|      d       #
-                ##_|a            [] o  EEW 3
-      (Bancada) ##_|            c[] o/ @ 2    (Clientes)
-                ##_|             [] o  @W 5
-                #                [] o/ ÚÚ 1
-                #       b         #
-         (Suco) #(Ú)  /¨-¨0¨\  (=)# (Pão) 
-                ########5#5########
-                    (Hambúrguer)    
-
-*/
