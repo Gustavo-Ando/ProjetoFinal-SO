@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,7 +26,7 @@ typedef struct _player {
     int x, y;
     int last_x, last_y;
     enum Item_type item;
-    int is_active;
+    int is_active, is_me;
 } PLAYER;
 
 PLAYER players[4];
@@ -111,7 +112,7 @@ static void *curses(void *arg){
                 attron(COLOR_PAIR(30 + 1 + i) | A_BOLD);
                 mvaddch(start_y+players[i].y, start_x+players[i].x, player_char[i]);
                 attroff(COLOR_PAIR(30 + 1 + i) | A_BOLD);
-                if(players[i].item != NONE) {
+                if(players[i].is_me && players[i].item != NONE) {
                     int color_index;
                     switch(players[i].item){
                         case PAO: color_index = 10; break;
@@ -152,13 +153,15 @@ static void *curses(void *arg){
     return NULL;
 }
 
+
 static void process_message_item(char *message){
+    // Access CR
     pthread_mutex_lock(&players_mutex);
     int index = msgS_item_get_player_index(message);
     enum Item_type item = msgS_item_get_item_type(message);
     players[index].item = item;
     pthread_mutex_unlock(&players_mutex);
-    
+    // Debug
     pthread_mutex_lock(&debug_mutex);
     sprintf(debug[current_debug_line], "ITEM %d:%c", index, item);
     current_debug_line = (current_debug_line + 1) % 10;
@@ -196,6 +199,20 @@ static void process_message_players(char *message){
     pthread_mutex_unlock(&players_mutex);
 }
 
+static void process_message_system(char *message){
+    pthread_mutex_lock(&debug_mutex);
+    sprintf(debug[current_debug_line], "INDEX %d", msgS_system_get_player_index(message));
+    current_debug_line = (current_debug_line + 1) % 10;
+    pthread_mutex_unlock(&debug_mutex);
+
+    // Access CR and update the given player's status, updating number of players in the game
+    pthread_mutex_lock(&players_mutex);
+    for(int i = 0; i < 4; i++){
+        players[i].is_me = (i == msgS_system_get_player_index(message));
+    }
+    pthread_mutex_unlock(&players_mutex);
+}
+
 static void *socket_read_thread(void *arg){
     int client_fd = *(int*)arg;
     char buffer[MESSAGE_SIZE + 1] = {0};
@@ -211,6 +228,7 @@ static void *socket_read_thread(void *arg){
                 case MOVEMENT:  process_message_movement(buffer + current_index); break;
                 case PLAYERS:  process_message_players(buffer + current_index); break;
                 case ITEM: process_message_item(buffer + current_index); break;
+                case SYSTEM: process_message_system(buffer + current_index); break;
                 // If there are no more messages, end the loop
                 default: buffer[current_index] = '\0';  break;
             }
@@ -256,6 +274,7 @@ int main(int argc, char **argv){
     // Initialize all players
     for(int i = 0; i < 4; i++){
         players[i].is_active = 0;
+        players[i].is_me = 0;
         players[i].x = -1;
         players[i].y = -1;
         players[i].last_x = -1;
@@ -299,4 +318,3 @@ int main(int argc, char **argv){
     close(client_fd);
     return 0;
 }
-

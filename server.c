@@ -41,14 +41,19 @@ static void send_game_state(int index){
     // Access CR
     pthread_mutex_lock(&clients_mutex);
     char message[MESSAGE_SIZE];
+    msgS_system(message, index);
+    if(send(clients[index].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
+    
     for(int i = 0; i < MAX_CLIENTS; i++){
         // Create a message for all clients informing their status (connected or not)
         msgS_players(message, i, clients[i].socket != 0);
         // Send and check if succesful
         if(send(clients[index].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
-        // Create and send a message with connected players' position
+        // Create and send a message with connected players' position and item
         if(clients[i].socket != 0) {
             msgS_movement(message, i, clients[i].x, clients[i].y);
+            if(send(clients[index].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
+            msgS_item(message, i, clients[i].item);
             if(send(clients[index].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
         }
     }
@@ -133,7 +138,7 @@ static void *read_master_socket(void *args){
         for(int i = 0; i < MAX_CLIENTS; i++){
             if(clients[i].socket != 0) continue;
             clients[i].socket = new_socket;
-            // Defines initial position
+            // Defines initial position and item
             clients[i].x = 6;
             clients[i].y = 5;
             clients[i].item = NONE;
@@ -143,7 +148,8 @@ static void *read_master_socket(void *args){
             break;
         }
         pthread_mutex_unlock(&clients_mutex);
-        
+
+        // Update game
         send_game_state(new_index);
         broadcast_player_connection(new_index);
         broadcast_player_position(new_index);

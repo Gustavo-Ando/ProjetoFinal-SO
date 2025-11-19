@@ -63,6 +63,16 @@ int msgS_players_get_status(char *message){
     return message[2] - '0';
 }
 
+void msgS_system(char *message, int player_index){
+    message[0] = SYSTEM;
+    message[1] = '0' + player_index;
+    message[2] = '\0';
+}
+
+int msgS_system_get_player_index(char *message){
+    return message[1] - '0';
+}
+
 void msgS_movement(char *message, int player_index, int x, int y){
     message[0] = MOVEMENT;
     message[1] = '0' + player_index;
@@ -164,6 +174,7 @@ int msg_get_size(char *message){
         case INPUT: return 2;
         case CONNECTION: return 2;
         case PLAYERS: return 3;
+        case SYSTEM: return 2;
         case MOVEMENT: return 4;
         case ITEM: return 3;
         case OVEN: return 3;
