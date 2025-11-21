@@ -1,7 +1,9 @@
-#ifndef MESSAGE_HEADER
-#define MESSAGE_HEADER
+#ifndef MESSAGE_H
+#define MESSAGE_H
 
 #define MESSAGE_SIZE 128
+
+#include "map.h"
 
 enum Message_type {
     // CLIENT MESSAGES
@@ -10,7 +12,7 @@ enum Message_type {
 
     // SERVER MESSAGES
     PLAYERS = 'P', // Player join or leave server
-    SYSTEM = 'S',
+    SYSTEM = 'S', // Player index
     MOVEMENT = 'M', // Player position
     ITEM = 'I', // Player get or lose item
     OVEN = 'O', // Oven start, ready, burns or empties
@@ -18,23 +20,11 @@ enum Message_type {
     CUSTOMER = 'C', // Customer arrive, receive order, or leaves
 };
 
-enum Item_type {
-    NONE = ' ',
-    PAO = '=',
-    HAMBURGUER = '-',
-    HAMBURGUER_QUEIMADO = '~',
-    HAMBURGUER_PRONTO = 'E',
-    SALADA = '@',
-    SUCO = 'U',
-    BATATA = 'W',
-    BATATA_QUEIMADA = 'M',
-};
-
 enum Oven_status {
-    EMPTY = 'E',
-    COOKING = 'C',
-    READY = 'R',
-    BURNED = 'B'
+    EMPTY = 'E', // Empty oven (player can start oven)
+    COOKING = 'C', // Cooking food (cannot get item)
+    READY = 'R', // Food ready (player can get item)
+    BURNED = 'B' // Food burned (player can get burneed item)
 };
 
 void msgC_input(char *message, char input);

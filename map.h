@@ -1,98 +1,70 @@
 #ifndef MAP_H
 #define MAP_H
 
-#include <curses.h>
-
-#include "message.h"
+#include "config.h"
 
 #define MAP_WIDTH 19
 #define MAP_HEIGHT 10
 
+#define MAP_COLOR_DEFAULT 0
+#define MAP_COLOR_WALLS 1
+#define MAP_COLOR_TRASH 2
+#define MAP_COLOR_PLATES_1 3
+#define MAP_COLOR_PLATES_2 4
+#define MAP_COLOR_OVEN 5
+
+#define ITEM_COLOR_BREAD 10
+#define ITEM_COLOR_HAMBURGER 11
+#define ITEM_COLOR_HAMBURGER_BURNED 12
+#define ITEM_COLOR_HAMBURGER_READY 13
+#define ITEM_COLOR_SALAD 14
+#define ITEM_COLOR_JUICE 15
+#define ITEM_COLOR_FRIES 16
+#define ITEM_COLOR_FRIES_BURNED 17
+
+#define NUMBER_COLOR_DEFAULT 20
+#define NUMBER_COLOR_WARNING 21
+#define NUMBER_COLOR_EMERGENCY 22
+
+#define PLAYERS_COLOR_CUSTOMER 30
+#define PLAYERS_COLOR_P1 31
+#define PLAYERS_COLOR_P2 32
+#define PLAYERS_COLOR_P3 33
+#define PLAYERS_COLOR_P4 34
+
+// Enum of item types and their rendered characters
+enum Item_type {
+    NONE = ' ',
+    BREAD = '=',
+    HAMBURGER = '-',
+    HAMBURGER_BURNED = '~',
+    HAMBURGER_READY = 'E',
+    SALAD = '@',
+    JUICE = 'U',
+    FRIES = 'W',
+    FRIES_BURNED = 'M',
+};
 
 // CLIENT
+extern char map_players_char[MAX_PLAYERS];
+
 // Game map
-char map[MAP_HEIGHT][MAP_WIDTH] = {
-    "########n#n########",
-    "##x|  \\ O O /  (@)#",
-    "## |              #",
-    "## |             []",
-    "## |             []",
-    "## |             []",
-    "#                []",
-    "#                 #",
-    "#(U)  /\"0\"0\"\\  (=)#",
-    "########n#n########"
-};
+extern char map[MAP_HEIGHT][MAP_WIDTH];
 
 // Map with the attr of each char
-int attr_map[MAP_HEIGHT][MAP_WIDTH] = {
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, A_UNDERLINE, A_BOLD, 0, 0, 0, A_UNDERLINE, A_UNDERLINE, A_UNDERLINE, A_UNDERLINE, A_UNDERLINE, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, A_UNDERLINE, A_BOLD, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, A_UNDERLINE, A_BOLD, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, A_UNDERLINE, A_BOLD, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, A_UNDERLINE, A_BOLD, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-};
+extern int attr_map[MAP_HEIGHT][MAP_WIDTH];
+
 // Map with the color codes of each char
-int color_map[MAP_HEIGHT][MAP_WIDTH] = {
-    {1, 1, 1, 1, 1, 1, 1, 1, 20, 1, 20, 1, 1, 1, 1, 1, 1, 1, 1},
-    {1, 1, 2, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 14, 0, 1},
-    {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3},
-    {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4},
-    {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 15, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 10, 0, 1},
-    {1, 1, 1, 1, 1, 1, 1, 1, 20, 1, 20, 1, 1, 1, 1, 1, 1, 1, 1}
-};
+extern int color_map[MAP_HEIGHT][MAP_WIDTH];
 
 // SERVER
 // Game map with blocked spaces
-int game_map[MAP_HEIGHT][MAP_WIDTH] = {
-    {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-    {1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1},
-    {1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-    {1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-    {1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1},
-    {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
-};
+extern int game_map[MAP_HEIGHT][MAP_WIDTH];
 
 // Game map with itens
-enum Item_type item_map[MAP_HEIGHT][MAP_WIDTH] = {
-    {NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE},
-    {NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE},
-    {NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, SALADA, NONE, NONE},
-    {NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE},
-    {NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE},
-    {NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE},
-    {NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE},
-    {NONE, NONE, SUCO, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, PAO, NONE, NONE},
-    {NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE},
-    {NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE},
-};
+extern enum Item_type item_map[MAP_HEIGHT][MAP_WIDTH];
 
 // Game map with trash position
-int trash_map[MAP_HEIGHT][MAP_WIDTH] = {
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-};
-
+extern int trash_map[MAP_HEIGHT][MAP_WIDTH];
 
 #endif

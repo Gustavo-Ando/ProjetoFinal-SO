@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,115 +13,42 @@
 #include <sys/types.h>
 #include <sys/time.h>
 
+#include "server_send_message.h"
 #include "message.h"
 #include "map.h"
+#include "utility.h"
+#include "server.h"
 
 #define PORT 8080
-#define MAX_CLIENTS 4
 
-typedef struct _client {
-    int socket;
-    int x, y;
-    enum Item_type item;
-} CLIENT;
-
-void fail(char *str){
-    perror(str);
-    exit(EXIT_FAILURE);
-}
-
-CLIENT clients[MAX_CLIENTS];
-int connected; // Number of connected clients
-pthread_mutex_t clients_mutex;
-
-struct sockaddr_in address;
-
-static void send_game_state(int index){
-    // Access CR
-    pthread_mutex_lock(&clients_mutex);
-    char message[MESSAGE_SIZE];
-    msgS_system(message, index);
-    if(send(clients[index].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
-    
-    for(int i = 0; i < MAX_CLIENTS; i++){
-        // Create a message for all clients informing their status (connected or not)
-        msgS_players(message, i, clients[i].socket != 0);
-        // Send and check if succesful
-        if(send(clients[index].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
-        // Create and send a message with connected players' position and item
-        if(clients[i].socket != 0) {
-            msgS_movement(message, i, clients[i].x, clients[i].y);
-            if(send(clients[index].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
-            msgS_item(message, i, clients[i].item);
-            if(send(clients[index].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
-        }
-    }
-    pthread_mutex_unlock(&clients_mutex);
-}
-
-static void broadcast_player_connection(int index){
-    // Access CR
-    pthread_mutex_lock(&clients_mutex);
-    char message[MESSAGE_SIZE];
-    //Create a message for the given client informing its status
-    msgS_players(message, index, clients[index].socket != 0);
-    for(int i = 0; i < MAX_CLIENTS; i++){
-        // Send it to all connected players
-        if(clients[i].socket != 0) {
-            if(send(clients[i].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
-        }
-    }
-    pthread_mutex_unlock(&clients_mutex);
-
-}
-
-// Send updates to the players when they move
-static void broadcast_player_position(int index){
-    pthread_mutex_lock(&clients_mutex);
-    char message[MESSAGE_SIZE];
-    // Create message for the given client informing its status
-    msgS_movement(message, index, clients[index].x, clients[index].y);
-    for(int i = 0; i < MAX_CLIENTS; i++){
-        // Send it to all connected players
-        if(clients[i].socket != 0) {
-            if(send(clients[i].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
-        }
-    }
-    pthread_mutex_unlock(&clients_mutex);
-}
-
-// Send update to players when player item updates
-static void broadcast_player_item(int index){
-    pthread_mutex_lock(&clients_mutex);
-    char message[MESSAGE_SIZE];
-    // Create message for the given client informing its status
-    msgS_item(message, index, clients[index].item);
-    for(int i = 0; i < MAX_CLIENTS; i++){
-        // Send it to all connected players
-        if(clients[i].socket != 0) {
-            if(send(clients[i].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
-        }
-    }
-    pthread_mutex_unlock(&clients_mutex);
-}
-// Thread to deal with master_socket (accept new connections)
+/*
+    Thread to read data in master_socket
+    Responsible for dealing with incoming connections, adding it to client list
+    Params:
+        - void *args (INDEXED_THREAD_ARG_STRUCT): struct containing shared data and master_socket index
+    Return:
+        - 
+*/
 static void *read_master_socket(void *args){
-    int master_socket = *(int*)args;
-    int addr_len = sizeof(address);
+    INDEXED_THREAD_ARG_STRUCT indexed_struct = *(INDEXED_THREAD_ARG_STRUCT *)args; // Cast
+    THREAD_ARG_STRUCT *thread_arg = indexed_struct.thread_arg;
+    // In this case, socket_index is actually the fd to the master_socket
+    int master_socket = indexed_struct.socket_index;
+    int addr_len = sizeof(thread_arg->address);
     
     while(1){
         // Accepts the connection
-        int new_socket = accept(master_socket, (struct sockaddr *)&address, (socklen_t *)&addr_len);
+        int new_socket = accept(master_socket, (struct sockaddr *)&thread_arg->address, (socklen_t *)&addr_len);
         if(new_socket < 0) fail("Accept failed");
         printf("New connection!\n");
         printf(" - Socket FD: %d\n", new_socket);
-        printf(" - IP: %s:%d\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+        printf(" - IP: %s:%d\n", inet_ntoa(thread_arg->address.sin_addr), ntohs(thread_arg->address.sin_port));
         
-        // Access CR to read number of connected clients and check if a connection is possible
+        // Access client CR to read number of connected clients and check if a connection is possible
         int is_full = 0;
-        pthread_mutex_lock(&clients_mutex);
-        if(connected == MAX_CLIENTS) is_full = 1;
-        pthread_mutex_unlock(&clients_mutex);
+        pthread_mutex_lock(&thread_arg->clients_mutex);
+        if(thread_arg->connected == MAX_PLAYERS) is_full = 1;
+        pthread_mutex_unlock(&thread_arg->clients_mutex);
 
         // If reached the limit, reject the connection and continue
         if(is_full){
@@ -132,123 +58,155 @@ static void *read_master_socket(void *args){
             continue;
         }
         
-        // Access CR to increase number of connected clients and add client to the list
-        pthread_mutex_lock(&clients_mutex);
+        // Access client CR to increase number of connected clients and add client to the list
+        pthread_mutex_lock(&thread_arg->clients_mutex);
         int new_index;
-        for(int i = 0; i < MAX_CLIENTS; i++){
-            if(clients[i].socket != 0) continue;
-            clients[i].socket = new_socket;
+        for(int i = 0; i < MAX_PLAYERS; i++){
+            // If the index is already in use, tries the next one
+            if(thread_arg->clients[i].socket != 0) continue;
+            thread_arg->clients[i].socket = new_socket;
             // Defines initial position and item
-            clients[i].x = 6;
-            clients[i].y = 5;
-            clients[i].item = NONE;
+            thread_arg->clients[i].x = 6;
+            thread_arg->clients[i].y = 5;
+            thread_arg->clients[i].item = NONE;
             new_index = i;
-            connected++;
+            // Increases the number of connected players
+            thread_arg->connected++;
             printf(" - Adding socket as %d\n\n", i);
             break;
         }
-        pthread_mutex_unlock(&clients_mutex);
+        pthread_mutex_unlock(&thread_arg->clients_mutex);
 
-        // Update game
-        send_game_state(new_index);
-        broadcast_player_connection(new_index);
-        broadcast_player_position(new_index);
-        broadcast_player_item(new_index);
+        // Send all data to new client
+        send_game_state(thread_arg, new_index);
+        // Update other clients of the new player
+        broadcast_player_connection(thread_arg, new_index);
+        broadcast_player_position(thread_arg, new_index);
+        broadcast_player_item(thread_arg, new_index);
     }
 
     return NULL;
 }
 
-static void treat_client_input(char input, int index){
-    // Access CR
-    pthread_mutex_lock(&clients_mutex);
-    // Deals with the movements
+/*
+    Function to treat input from a client
+    Responsible for checking if a move or action is valid, processing it's effects and sending result to all clients
+    Params:
+        - THREAD_ARG_STRUCT *args: struct containing shared data
+        - char input: character inputed from client
+        - int index: index of client responsible for input
+    Return:
+        - 
+*/
+static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int index){
+    // Access client CR
+    pthread_mutex_lock(&thread_arg->clients_mutex);
+    // Deals with the movements and actions
     int try_moved = 0, try_action = 0;
     switch(input) {
         case 'w':
             try_moved = 1;
-            if(!(game_map[clients[index].y - 1][clients[index].x])) 
-                clients[index].y--;
+            if(!(game_map[thread_arg->clients[index].y - 1][thread_arg->clients[index].x])) 
+                thread_arg->clients[index].y--;
             break;
         case 'a':
             try_moved = 1;
-            if(!(game_map[clients[index].y][clients[index].x - 2])) 
-                clients[index].x -= 2;
+            if(!(game_map[thread_arg->clients[index].y][thread_arg->clients[index].x - 2])) 
+                thread_arg->clients[index].x -= 2;
             break;
         case 's':
             try_moved = 1;
-            if(!(game_map[clients[index].y + 1][clients[index].x])) 
-                clients[index].y++;
+            if(!(game_map[thread_arg->clients[index].y + 1][thread_arg->clients[index].x])) 
+                thread_arg->clients[index].y++;
             break;
         case 'd':
             try_moved = 1;
-            if(!(game_map[clients[index].y][clients[index].x + 2])) 
-                clients[index].x += 2;
+            if(!(game_map[thread_arg->clients[index].y][thread_arg->clients[index].x + 2])) 
+                thread_arg->clients[index].x += 2;
             break;
         case ' ':
             try_action = 1;
             // Get item
-            if(item_map[clients[index].y][clients[index].x] != NONE && clients[index].item == NONE){
-                clients[index].item = item_map[clients[index].y][clients[index].x];
+            if(item_map[thread_arg->clients[index].y][thread_arg->clients[index].x] != NONE && thread_arg->clients[index].item == NONE){
+                thread_arg->clients[index].item = item_map[thread_arg->clients[index].y][thread_arg->clients[index].x];
             }
             // Trash item
-            if(trash_map[clients[index].y][clients[index].x]){
-                clients[index].item = NONE;
+            if(trash_map[thread_arg->clients[index].y][thread_arg->clients[index].x]){
+                thread_arg->clients[index].item = NONE;
             }
             break;
         default:
             break;
     }
     printf("Received input from client %d: %c\n", index, input);
-    printf(" - %d, %d\n", clients[index].x, clients[index].y);
-    pthread_mutex_unlock(&clients_mutex);
-    if(try_moved) broadcast_player_position(index);
-    if(try_action) broadcast_player_item(index);
+    printf(" - %d, %d\n", thread_arg->clients[index].x, thread_arg->clients[index].y);
+    pthread_mutex_unlock(&thread_arg->clients_mutex);
+    // If there was a movement, broadcast info
+    if(try_moved) broadcast_player_position(thread_arg, index);
+    // If there was an action, broadcast info
+    if(try_action) broadcast_player_item(thread_arg, index);
 }
 
-// Thread to deal with messages received from the clients
+/*
+    Thread to read data from a client
+    Responsible for dealing with disconnection (remove from client list), and receiving input
+    Params:
+        - void *args (INDEXED_THREAD_ARG_STRUCT): struct containing shared data and client index
+    Return:
+        - 
+*/
 static void *read_client_socket(void *args){
-    int index = *(int *)args;
-    int addr_len = sizeof(address);
+    INDEXED_THREAD_ARG_STRUCT indexed_struct = *(INDEXED_THREAD_ARG_STRUCT *)args; // Cast
+    THREAD_ARG_STRUCT *thread_arg = indexed_struct.thread_arg;
+    int index = indexed_struct.socket_index;
+    int addr_len = sizeof(thread_arg->address);
     // Repeat to check if socket exists 
     while(1){
-        // Access CR to read the socket
-        pthread_mutex_lock(&clients_mutex);
-        int sd = clients[index].socket;
-        pthread_mutex_unlock(&clients_mutex);
+        // Access client CR to read the socket
+        pthread_mutex_lock(&thread_arg->clients_mutex);
+        int sd = thread_arg->clients[index].socket;
+        pthread_mutex_unlock(&thread_arg->clients_mutex);
         if(sd == 0) continue;
         // If exists, treat client until it disconnects
         while(1){
             char buffer[MESSAGE_SIZE + 1];
+            // Keeps track of the size of the message received
             int read_length = read(sd, buffer, MESSAGE_SIZE);
-            buffer[read_length] = '\0';
-            
+            buffer[read_length] = '\0'; // Null terminate message
+
+            // If there is no message, the client disconnected
             if(read_length == 0) {
                 // Disconnected
-                getpeername(sd, (struct sockaddr *)&address, (socklen_t *)&addr_len);
+                getpeername(sd, (struct sockaddr *)&thread_arg->address, (socklen_t *)&addr_len);
                 printf("Host disconnected.\n");
-                printf(" - IP: %s:%d\n\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
-    
+                printf(" - IP: %s:%d\n\n", inet_ntoa(thread_arg->address.sin_addr), ntohs(thread_arg->address.sin_port));
+
+                // close the socket
                 close(sd);
+                
                 // Access CR to disconnect the client
-                pthread_mutex_lock(&clients_mutex);
-                clients[index].socket = 0;
-                connected--;
-                pthread_mutex_unlock(&clients_mutex);
-                broadcast_player_connection(index);
+                pthread_mutex_lock(&thread_arg->clients_mutex);
+                thread_arg->clients[index].socket = 0;
+                thread_arg->connected--;
+                pthread_mutex_unlock(&thread_arg->clients_mutex);
+                // Update player's connection
+                broadcast_player_connection(thread_arg, index);
                 break;
             } else {
-                // Treat input
+                // Index to read message
                 int current_index = 0;
+                // While is not the end of the message
                 while(current_index < MESSAGE_SIZE && current_index < read_length && buffer[current_index] != '\0'){
+                    // Treat it based on its type
                     switch(msg_get_type(buffer + current_index)){
                         case INPUT:
-                            treat_client_input(msgC_input_get_input(buffer + current_index), index);
+                            treat_client_input(thread_arg, msgC_input_get_input(buffer + current_index), index);
                             break;
                         default:
                             buffer[current_index] = '\0';
                             break;
-                    } 
+                    }
+                    // Updates index given the message size to deal with concatenated messages
                     current_index += msg_get_size(buffer + current_index);
                 }
             }
@@ -259,10 +217,11 @@ static void *read_client_socket(void *args){
 }
 
 int main(int argc, char** argv){
+    THREAD_ARG_STRUCT *thread_arg = malloc(sizeof(THREAD_ARG_STRUCT));
     // Initialize clients
-    connected = 0;
-    for(int i = 0; i < MAX_CLIENTS; i++){
-        clients[i].socket = 0;
+    thread_arg->connected = 0;
+    for(int i = 0; i < MAX_PLAYERS; i++){
+        thread_arg->clients[i].socket = 0;
     }
 
     // Initialize server socket
@@ -271,32 +230,41 @@ int main(int argc, char** argv){
     if(setsockopt(master_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0) fail("Setsockopt failed");
 
     // Set address
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(PORT);
+    thread_arg->address.sin_family = AF_INET;
+    thread_arg->address.sin_addr.s_addr = INADDR_ANY;
+    thread_arg->address.sin_port = htons(PORT);
 
     // Bind and listen socket
-    if(bind(master_socket, (struct sockaddr *)&address, sizeof(address)) < 0) fail("Bind failed");
+    if(bind(master_socket, (struct sockaddr *)&thread_arg->address, sizeof(thread_arg->address)) < 0) fail("Bind failed");
     if(listen(master_socket, 3) < 0) fail("Listen failed");
 
     printf("Waiting for connections...\n");
 
     // Create a thread for the server
+    INDEXED_THREAD_ARG_STRUCT *master_arg_struct = malloc(sizeof(INDEXED_THREAD_ARG_STRUCT));
+    master_arg_struct->socket_index = master_socket;
+    master_arg_struct->thread_arg = thread_arg;
     pthread_t master_thr;
-    pthread_create(&master_thr, NULL, read_master_socket, &master_socket);
+    pthread_create(&master_thr, NULL, read_master_socket, master_arg_struct);
 
     // Create a thread for each of the clients 
-    pthread_t client_thr[MAX_CLIENTS];
-    // Keeps a list of indexes (passing by reference)
-    int client_index[MAX_CLIENTS];
-    for(int i = 0; i < MAX_CLIENTS; i++){
-        client_index[i] = i;
-        pthread_create(&client_thr[i], NULL, read_client_socket, &client_index[i]);
+    pthread_t client_thr[MAX_PLAYERS];
+    // Keeps a list of indexed structs (passing by reference)
+    INDEXED_THREAD_ARG_STRUCT *indexed_arg_struct = malloc(4 * sizeof(INDEXED_THREAD_ARG_STRUCT));
+    for(int i = 0; i < MAX_PLAYERS; i++){
+        indexed_arg_struct[i].socket_index = i;
+        indexed_arg_struct[i].thread_arg = thread_arg;
+        pthread_create(&client_thr[i], NULL, read_client_socket, &indexed_arg_struct[i]);
     }
 
     // Join threads
     pthread_join(master_thr, NULL);
-    for(int i = 0; i < MAX_CLIENTS; i++) pthread_join(client_thr[i], NULL);
+    for(int i = 0; i < MAX_PLAYERS; i++) pthread_join(client_thr[i], NULL);
+
+    // Free space
+    free(indexed_arg_struct);
+    free(master_arg_struct);
+    free(thread_arg);
     
     return 0;
 }
