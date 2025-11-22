@@ -35,8 +35,9 @@ void color_config(){
     init_pair(ITEM_COLOR_HAMBURGER_READY, COLOR_YELLOW, -1); // Hamburger Ready
     init_pair(ITEM_COLOR_SALAD, COLOR_GREEN, -1); // Salad
     init_pair(ITEM_COLOR_JUICE, COLOR_CYAN, -1); // Juice
-    init_pair(ITEM_COLOR_FRIES, COLOR_YELLOW, -1); // French Fries
+    init_pair(ITEM_COLOR_FRIES, COLOR_WHITE, -1); // French Fries
     init_pair(ITEM_COLOR_FRIES_BURNED, COLOR_BLACK, -1); // French Fries Burned
+    init_pair(ITEM_COLOR_FRIES, COLOR_YELLOW, -1); // French Fries Ready
 
     // Numbers
     init_pair(NUMBER_COLOR_DEFAULT, COLOR_BLACK, COLOR_WHITE); // Default
@@ -65,10 +66,34 @@ void render_map(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y){
     // For each character
     for(int line = 0; line < MAP_HEIGHT; line++){
         for(int col = 0; col < MAP_WIDTH; col++){
+            char char_to_render = map[line][col];
+            int pair_color = color_map[line][col];
+            int attr = attr_map[line][col];
+
+            for(int i=0; i < num_appliances; i++) {
+                if(appliances[i].x == col && appliances[i].y == line) {
+                    if(appliances[i].state != COOK_OFF) {
+                        char_to_render = (char)appliances[i].content; 
+                        
+                        // Ajuste de cor baseado no item
+                        switch(appliances[i].content) {
+                            case HAMBURGER: pair_color = ITEM_COLOR_HAMBURGER; break;
+                            case HAMBURGER_READY: pair_color = ITEM_COLOR_HAMBURGER_READY; break;
+                            case HAMBURGER_BURNED: pair_color = ITEM_COLOR_HAMBURGER_BURNED; break;
+                            case FRIES: pair_color = ITEM_COLOR_FRIES; break;
+                            case FRIES_READY: pair_color = ITEM_COLOR_FRIES_READY; break; 
+                            case FRIES_BURNED: pair_color = ITEM_COLOR_FRIES_BURNED; break;
+                            default: break;
+                        }
+                    }
+                    break;
+                }
+            }
+
             // Set color, attributes and render in position
-            attron(COLOR_PAIR(color_map[line][col]) | attr_map[line][col]);
-            mvaddch(start_y + line, start_x + col, map[line][col]);
-            attroff(COLOR_PAIR(color_map[line][col]) | attr_map[line][col]);
+            attron(COLOR_PAIR(pair_color) | attr);
+            mvaddch(start_y + line, start_x + col, char_to_render);
+            attroff(COLOR_PAIR(pair_color) | attr);
         }
     }
 }
@@ -108,6 +133,7 @@ void render_players(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y){
             case JUICE: color_index = 15; break;
             case FRIES: color_index = 16; break;
             case FRIES_BURNED: color_index = 17; break;
+            case FRIES_READY: color_index = 18; break;
             case NONE: color_index = 0; break;
         }
 

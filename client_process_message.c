@@ -108,3 +108,42 @@ void process_message_system(char *message, THREAD_ARG_STRUCT *thread_arg){
     }
     pthread_mutex_unlock(&thread_arg->players_mutex);
 }
+
+
+/*
+    Function to process appliance status message from server
+    Responsible for updating the appliance state and content for rendering
+    Params:
+        - char *message: message received from server
+        - THREAD_ARG_STRUCT *thread_arg: struct containing shared data
+*/
+void process_message_appliance(char *message, THREAD_ARG_STRUCT *thread_arg){
+    
+    // Recupera dados da mensagem usando as novas funções
+    int index = msgS_appliance_get_index(message);
+    int status = msgS_appliance_get_status(message);
+    
+    pthread_mutex_lock(&thread_arg->players_mutex);
+    
+    if(index >= 0 && index < num_appliances) {
+        appliances[index].state = status;
+        
+        // Lógica para atualizar o Conteúdo visual baseado no Status e Tipo
+        if (status == COOK_OFF) {
+            appliances[index].content = NONE;
+        } else {
+            if (appliances[index].type == APP_OVEN) {
+                if (status == COOK_COOKING) appliances[index].content = HAMBURGER;
+                else if (status == COOK_READY) appliances[index].content = HAMBURGER_READY;
+                else if (status == COOK_BURNT) appliances[index].content = HAMBURGER_BURNED;
+            } 
+            else if (appliances[index].type == APP_FRYER) {
+                if (status == COOK_COOKING) appliances[index].content = FRIES;
+                else if (status == COOK_READY) appliances[index].content = FRIES_READY;
+                else if (status == COOK_BURNT) appliances[index].content = FRIES_BURNED;
+            }
+        }
+    }
+    
+    pthread_mutex_unlock(&thread_arg->players_mutex);
+}

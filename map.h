@@ -2,6 +2,7 @@
 #define MAP_H
 
 #include "config.h"
+#include <time.h>
 
 #define MAP_WIDTH 19
 #define MAP_HEIGHT 10
@@ -21,6 +22,7 @@
 #define ITEM_COLOR_JUICE 15
 #define ITEM_COLOR_FRIES 16
 #define ITEM_COLOR_FRIES_BURNED 17
+#define ITEM_COLOR_FRIES_READY 18
 
 #define NUMBER_COLOR_DEFAULT 20
 #define NUMBER_COLOR_WARNING 21
@@ -32,18 +34,44 @@
 #define PLAYERS_COLOR_P3 33
 #define PLAYERS_COLOR_P4 34
 
+#define MAX_APPLIANCES 20
+
 // Enum of item types and their rendered characters
 enum Item_type {
     NONE = ' ',
     BREAD = '=',
+    SALAD = '@',
+    JUICE = 'U',
+
     HAMBURGER = '-',
     HAMBURGER_BURNED = '~',
     HAMBURGER_READY = 'E',
-    SALAD = '@',
-    JUICE = 'U',
+    
     FRIES = 'W',
-    FRIES_BURNED = 'M',
+    FRIES_READY = 'M',
+    FRIES_BURNED = 'K',
 };
+
+typedef enum {
+    COOK_OFF = 0,
+    COOK_COOKING = 1,
+    COOK_READY = 2,
+    COOK_BURNT = 3,
+} Cook_status;
+
+enum Appliance_type {
+    APP_OVEN = 1,
+    APP_FRYER = 2,
+};
+
+typedef struct {
+    int x, y;                 // Posição visual (onde muda o caracter)
+    enum Appliance_type type; 
+    Cook_status state;
+    time_t start_time;
+    enum Item_type content;
+} Appliance;
+
 
 // CLIENT
 extern char map_players_char[MAX_PLAYERS];
@@ -66,5 +94,12 @@ extern enum Item_type item_map[MAP_HEIGHT][MAP_WIDTH];
 
 // Game map with trash position
 extern int trash_map[MAP_HEIGHT][MAP_WIDTH];
+
+extern int appliance_interaction_map[MAP_HEIGHT][MAP_WIDTH]; 
+extern Appliance appliances[MAX_APPLIANCES];
+extern int num_appliances;
+
+void init_appliances();
+int get_appliance_id_at(int x, int y);
 
 #endif

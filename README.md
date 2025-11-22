@@ -4,7 +4,7 @@
 |---|---|
 |Gustavo Alvares Andó |15457345|
 |João Victor De Bortoli Prado |13672071|
-|Kaito Hayashi| --------|
+|Kaito Hayashi |12542543|
 |Maria Clara de Souza Capato|15475294|
 
 ## Como usar

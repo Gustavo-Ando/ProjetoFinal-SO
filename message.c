@@ -224,43 +224,27 @@ enum Item_type msgS_item_get_item_type(char *message){
 }
 
 /*
-    Function to create message containing the given oven's status
-    message[0] is the message code, message[1] contains the oven index, message[2] contains the oven status (enum)
-    Params:
-        - char *message: buffer containing the message
-        - int player_index: player's index
-        - enum Oven_status oven_status: enum with the oven status
-    Return:
-        - 
+    Function to create message containing the given appliance's status
+    message[0] is the message code, message[1] contains the appliance index, message[2] contains the status
 */
-void msgS_oven(char *message, int oven_index, enum Oven_status oven_status){
-    message[0] = OVEN;
-    message[1] = '0' + oven_index;
-    message[2] = oven_status;
+void msgS_appliance(char *message, int app_index, int status){
+    message[0] = APPLIANCE; 
+    message[1] = '0' + app_index;
+    message[2] = status;
     message[3] = '\0';
 }
 
 /*
-    Function to get the oven's index from an oven-type message
-    message[1] contains the oven's index
-    Params:
-        - char *message: buffer containing the message
-    Return:
-        - int oven index
+    Function to get the appliance's index from an appliance-type message
 */
-int msgS_oven_get_oven_index(char *message){
+int msgS_appliance_get_index(char *message){
     return message[1] - '0';
 }
 
 /*
-    Function to get the oven's status from an oven-type message
-    message[2] contains the oven's status
-    Params:
-        - char *message: buffer containing the message
-    Return:
-        - enum Oven_status oven status
+    Function to get the appliance's status from an appliance-type message
 */
-enum Oven_status msgS_oven_get_oven_status(char *message){
+int msgS_appliance_get_status(char *message){
     return message[2];
 }
 
@@ -396,7 +380,7 @@ int msg_get_size(char *message){
         case SYSTEM: return 2;
         case MOVEMENT: return 4;
         case ITEM: return 3;
-        case OVEN: return 3;
+        case APPLIANCE: return 3;
         case TABLE: return 3;
         case CUSTOMER: return 3 + msgS_customer_arrival_get_order_size(message);
         default: return 0;

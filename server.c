@@ -21,6 +21,9 @@
 
 #define PORT 8080
 
+#define TIME_TO_COOK 5
+#define TIME_TO_BURN 15
+
 /*
     Thread to read data in master_socket
     Responsible for dealing with incoming connections, adding it to client list
@@ -102,7 +105,7 @@ static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int in
     // Access client CR
     pthread_mutex_lock(&thread_arg->clients_mutex);
     // Deals with the movements and actions
-    int try_moved = 0, try_action = 0;
+    int try_moved = 0, try_action = 0, app_updated_index = -1;
     switch(input) {
         case 'w':
             try_moved = 1;
@@ -126,14 +129,60 @@ static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int in
             break;
         case ' ':
             try_action = 1;
-            // Get item
-            if(item_map[thread_arg->clients[index].y][thread_arg->clients[index].x] != NONE && thread_arg->clients[index].item == NONE){
-                thread_arg->clients[index].item = item_map[thread_arg->clients[index].y][thread_arg->clients[index].x];
+            int px = thread_arg->clients[index].x;
+            int py = thread_arg->clients[index].y;
+
+            // Pegar itens do chão
+            if(item_map[py][px] != NONE && thread_arg->clients[index].item == NONE){
+                thread_arg->clients[index].item = item_map[py][px];
             }
-            // Trash item
-            if(trash_map[thread_arg->clients[index].y][thread_arg->clients[index].x]){
+            // Jogar no Lixo
+            else if(trash_map[py][px]){
                 thread_arg->clients[index].item = NONE;
             }
+            // Interação com Fogão/Fritadeira
+            else {
+                // Verifica se está na posição de interação de alguma máquina
+                int app_id = get_appliance_id_at(px, py);
+                
+                if(app_id != -1) {
+                    Appliance *app = &appliances[app_id];
+                    enum Item_type p_item = thread_arg->clients[index].item;
+
+                    // Colocar para assar (caso Máquina vazia + Item certo na mão)
+                    if(app->state == COOK_OFF) {
+                        int success = 0;
+                        if(app->type == APP_OVEN && p_item == HAMBURGER) {
+                            app->content = HAMBURGER;
+                            success = 1;
+                        } else if(app->type == APP_FRYER && p_item == FRIES) {
+                            app->content = FRIES;
+                            success = 1;
+                        }
+
+                        if(success) {
+                            thread_arg->clients[index].item = NONE; // Tira da mão
+                            app->state = COOK_COOKING;
+                            app->start_time = time(NULL);
+                            app_updated_index = app_id;
+                        }
+                    }
+                    // Retirar item (caso Máquina vazia ocupada + Mão vazia)
+                    else if ((app->state != COOK_OFF) && p_item == NONE) {
+                        // Passa o item da máquina para a mão do jogador
+                        thread_arg->clients[index].item = app->content;
+                        
+                        // Reseta a máquina
+                        app->state = COOK_OFF;
+                        app->content = NONE;
+                        
+                        app_updated_index = app_id;
+                    }
+
+
+                }
+            }
+
             break;
         default:
             break;
@@ -145,6 +194,7 @@ static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int in
     if(try_moved) broadcast_player_position(thread_arg, index);
     // If there was an action, broadcast info
     if(try_action) broadcast_player_item(thread_arg, index);
+    if(app_updated_index != -1) broadcast_appliance_status(thread_arg, app_updated_index);
 }
 
 /*
@@ -216,6 +266,54 @@ static void *read_client_socket(void *args){
     return NULL;
 }
 
+/*
+    Thread to handle game physics and timers (Ovens/Fryers)
+*/
+static void *game_loop_thread(void *arg) {
+    THREAD_ARG_STRUCT *thread_arg = (THREAD_ARG_STRUCT *)arg;
+
+    while(1) {
+        sleep(1); // Verifica a cada 1 segundo
+        
+        pthread_mutex_lock(&thread_arg->clients_mutex);
+        
+        time_t now = time(NULL);
+        
+        for(int i = 0; i < num_appliances; i++) {
+            int changed = 0;
+            
+            // Estado: COZINHANDO -> PRONTO
+            if (appliances[i].state == COOK_COOKING) {
+                if (difftime(now, appliances[i].start_time) >= TIME_TO_COOK) {
+                    appliances[i].state = COOK_READY;
+                    // Atualiza conteúdo lógico do servidor
+                    appliances[i].content = (appliances[i].type == APP_OVEN) ? HAMBURGER_READY : FRIES_READY;
+                    changed = 1;
+                }
+            } 
+            // Estado: PRONTO -> QUEIMADO
+            else if (appliances[i].state == COOK_READY) {
+                if (difftime(now, appliances[i].start_time) >= TIME_TO_BURN) {
+                    appliances[i].state = COOK_BURNT;
+                    // Atualiza conteúdo lógico do servidor
+                    appliances[i].content = (appliances[i].type == APP_OVEN) ? HAMBURGER_BURNED : FRIES_BURNED;
+                    changed = 1;
+                }
+            }
+
+            // Se mudou o estado, avisa todos os clientes
+            if(changed) {
+                pthread_mutex_unlock(&thread_arg->clients_mutex); // Destrava antes de chamar broadcast para não travar
+                broadcast_appliance_status(thread_arg, i);
+                pthread_mutex_lock(&thread_arg->clients_mutex); // Trava de novo para continuar o loop
+            }
+        }
+        
+        pthread_mutex_unlock(&thread_arg->clients_mutex);
+    }
+    return NULL;
+}
+
 int main(int argc, char** argv){
     THREAD_ARG_STRUCT *thread_arg = malloc(sizeof(THREAD_ARG_STRUCT));
     // Initialize clients
@@ -223,6 +321,9 @@ int main(int argc, char** argv){
     for(int i = 0; i < MAX_PLAYERS; i++){
         thread_arg->clients[i].socket = 0;
     }
+
+    //Inicialize appliances
+    init_appliances();
 
     // Initialize server socket
     int master_socket, opt = 1;
@@ -256,6 +357,10 @@ int main(int argc, char** argv){
         indexed_arg_struct[i].thread_arg = thread_arg;
         pthread_create(&client_thr[i], NULL, read_client_socket, &indexed_arg_struct[i]);
     }
+
+    // Create Game Loop Thread
+    pthread_t game_thr;
+    pthread_create(&game_thr, NULL, game_loop_thread, thread_arg);
 
     // Join threads
     pthread_join(master_thr, NULL);

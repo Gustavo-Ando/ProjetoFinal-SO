@@ -4,6 +4,7 @@
 #include "server_send_message.h"
 #include "utility.h"
 #include "message.h"
+#include "map.h"
 
 /*
     Function to send current game state to a specific client
@@ -104,6 +105,33 @@ void broadcast_player_item(THREAD_ARG_STRUCT *thread_arg, int index){
         // Send it to all connected players
         if(thread_arg->clients[i].socket != 0) {
             if(send(thread_arg->clients[i].socket, message, strlen(message), 0) != strlen(message)) fail("Send error");
+        }
+    }
+    pthread_mutex_unlock(&thread_arg->clients_mutex);
+}
+
+/*
+    Function to send an appliance status update to all clients
+    Params:
+        - THREAD_ARG_STRUCT *thread_arg: struct contating shared data
+        - int index: index of the appliance to update
+    Return:
+        - 
+*/
+void broadcast_appliance_status(THREAD_ARG_STRUCT *thread_arg, int index){
+    // Access client CR
+    pthread_mutex_lock(&thread_arg->clients_mutex);
+    
+    // Busca o status atual direto da memória global
+    int status = appliances[index].state;
+
+    char message[MESSAGE_SIZE];
+    msgS_appliance(message, index, status);
+    
+    for(int i = 0; i < MAX_PLAYERS; i++){
+        if(thread_arg->clients[i].socket != 0) {
+            if(send(thread_arg->clients[i].socket, message, strlen(message), 0) != strlen(message)) 
+                fail("Send error");
         }
     }
     pthread_mutex_unlock(&thread_arg->clients_mutex);

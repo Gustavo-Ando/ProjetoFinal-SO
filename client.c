@@ -94,6 +94,7 @@ static void *socket_read_thread(void *arg){
                 case PLAYERS: process_message_players(buffer + current_index, thread_arg); break;
                 case ITEM: process_message_item(buffer + current_index, thread_arg); break;
                 case SYSTEM: process_message_system(buffer + current_index, thread_arg); break;
+                case APPLIANCE: process_message_appliance(buffer + current_index, thread_arg); break;
                 // If there are no more messages, end the loop
                 default: buffer[current_index] = '\0'; break;
             }
@@ -180,6 +181,9 @@ int main(int argc, char **argv){
         thread_arg->players[i].last_y = -1;
         thread_arg->players[i].item = NONE;
     }
+
+    //Inicialize appliances
+    init_appliances();
 
     // Initialize debug
     for(int i = 0; i < 10; i++){
