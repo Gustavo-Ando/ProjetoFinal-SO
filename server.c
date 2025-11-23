@@ -109,11 +109,14 @@ static void *read_master_socket(void *args)
         -
 */
 static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int index){
-    // Access client CR
     pthread_mutex_lock(&thread_arg->clients_mutex);
-    // Deals with the movements and actions
-    int try_moved = 0, try_action = 0, app_updated_index = -1;
+    
+    int try_moved = 0, try_action = 0;
+    int app_updated_index = -1;
+    int counter_updated_index = -1;
+
     switch(input) {
+        // Movimentacao (W, A, S, D)
         case 'w':
             try_moved = 1;
             if(!(game_map[thread_arg->clients[index].y - 1][thread_arg->clients[index].x])) 
@@ -134,6 +137,8 @@ static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int in
             if(!(game_map[thread_arg->clients[index].y][thread_arg->clients[index].x + 2])) 
                 thread_arg->clients[index].x += 2;
             break;
+
+        // Interacao
         case ' ':
             try_action = 1;
             int px = thread_arg->clients[index].x;
@@ -147,16 +152,16 @@ static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int in
             else if(trash_map[py][px]){
                 thread_arg->clients[index].item = NONE;
             }
-            // Interação com Fogão/Fritadeira
+            // Interação com Objetos (Máquinas e Bancadas)
             else {
-                // Verifica se está na posição de interação de alguma máquina
                 int app_id = get_appliance_id_at(px, py);
-                
+                int c_id = get_counter_id_at(px, py);
+
+                // Fogao/Fritadeira
                 if(app_id != -1) {
                     Appliance *app = &appliances[app_id];
                     enum Item_type p_item = thread_arg->clients[index].item;
 
-                    // Colocar para assar (caso Máquina vazia + Item certo na mão)
                     if(app->state == COOK_OFF) {
                         int success = 0;
                         if(app->type == APP_OVEN && p_item == HAMBURGER) {
@@ -168,41 +173,63 @@ static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int in
                         }
 
                         if(success) {
-                            thread_arg->clients[index].item = NONE; // Tira da mão
+                            thread_arg->clients[index].item = NONE;
                             app->state = COOK_COOKING;
                             app->start_time = time(NULL);
-                            app->time_left = TIME_TO_COOK;
+                            
+                            app->time_left = TIME_TO_COOK; 
+                            
                             app_updated_index = app_id;
                         }
                     }
-                    // Retirar item (caso Máquina vazia ocupada + Mão vazia)
                     else if ((app->state != COOK_OFF) && p_item == NONE) {
-                        // Passa o item da máquina para a mão do jogador
                         thread_arg->clients[index].item = app->content;
-                        
-                        // Reseta a máquina
                         app->state = COOK_OFF;
                         app->content = NONE;
-                        
+                        app->time_left = 0;
                         app_updated_index = app_id;
                     }
+                }
+                
+                // Bancada
+                else if (c_id != -1) {
+                    Counter *c = &counters[c_id];
+                    enum Item_type p_item = thread_arg->clients[index].item;
 
-
+                    if (p_item != NONE && c->content == NONE) {
+                        c->content = p_item;
+                        thread_arg->clients[index].item = NONE;
+                        counter_updated_index = c_id; 
+                    } 
+                    else if (p_item == NONE && c->content != NONE) {
+                        thread_arg->clients[index].item = c->content;
+                        c->content = NONE;
+                        counter_updated_index = c_id;
+                    }
                 }
             }
-
             break;
+            
         default:
             break;
     }
+    
     printf("Received input from client %d: %c\n", index, input);
     printf(" - %d, %d\n", thread_arg->clients[index].x, thread_arg->clients[index].y);
+    
     pthread_mutex_unlock(&thread_arg->clients_mutex);
-    // If there was a movement, broadcast info
-    if(try_moved) broadcast_player_position(thread_arg, index);
-    // If there was an action, broadcast info
-    if(try_action) broadcast_player_item(thread_arg, index);
-    if(app_updated_index != -1) broadcast_appliance_status(thread_arg, app_updated_index);
+    
+    if(try_moved) 
+        broadcast_player_position(thread_arg, index);
+        
+    if(try_action) 
+        broadcast_player_item(thread_arg, index);
+        
+    if(app_updated_index != -1) 
+        broadcast_appliance_status(thread_arg, app_updated_index);
+    
+    if(counter_updated_index != -1) 
+        broadcast_counter_update(thread_arg, counter_updated_index);
 }
 
 /*

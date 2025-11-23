@@ -162,7 +162,7 @@ void render_map(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
                     // Se a bancada tiver item, renderiza o item
                     if (counters[i].content != NONE)
                     {
-                        char_to_render = (char)counters[i].content;
+                        char_to_render = get_item_char(counters[i].content);
 
                         // Ajuste de cor baseado no item
                         switch (counters[i].content)
