@@ -8,5 +8,7 @@ void process_message_movement(char *message, THREAD_ARG_STRUCT *thread_arg);
 void process_message_players(char *message, THREAD_ARG_STRUCT *thread_arg);
 void process_message_system(char *message, THREAD_ARG_STRUCT *thread_arg);
 void process_message_appliance(char *message, THREAD_ARG_STRUCT *thread_arg);
+void process_message_counter(char *message, THREAD_ARG_STRUCT *thread_arg);
+;
 
 #endif

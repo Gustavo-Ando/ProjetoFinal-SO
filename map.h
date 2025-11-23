@@ -52,14 +52,16 @@ enum Item_type {
     FRIES_BURNED,
 };
 
-typedef enum {
+typedef enum
+{
     COOK_OFF = 0,
     COOK_COOKING = 1,
     COOK_READY = 2,
     COOK_BURNT = 3,
 } Cook_status;
 
-enum Appliance_type {
+enum Appliance_type
+{
     APP_OVEN = 1,
     APP_FRYER = 2,
 };
@@ -74,6 +76,13 @@ typedef struct {
     enum Item_type content;
 } Appliance;
 
+typedef struct
+{
+    int x, y; // Posição visual (onde muda o caracter)
+    enum Item_type content;
+} Counter;
+
+#define MAX_COUNTERS 32
 
 // CLIENT
 extern char map_players_char[MAX_PLAYERS];
@@ -97,11 +106,18 @@ extern enum Item_type item_map[MAP_HEIGHT][MAP_WIDTH];
 // Game map with trash position
 extern int trash_map[MAP_HEIGHT][MAP_WIDTH];
 
-extern int appliance_interaction_map[MAP_HEIGHT][MAP_WIDTH]; 
+extern int appliance_interaction_map[MAP_HEIGHT][MAP_WIDTH];
 extern Appliance appliances[MAX_APPLIANCES];
 extern int num_appliances;
 
 void init_appliances();
 int get_appliance_id_at(int x, int y);
+
+extern Counter counters[MAX_COUNTERS];
+extern int num_counters;
+extern int counter_interaction_map[MAP_HEIGHT][MAP_WIDTH];
+
+void init_counters();
+int get_counter_id_at(int x, int y);
 
 #endif
