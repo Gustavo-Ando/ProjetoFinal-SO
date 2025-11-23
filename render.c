@@ -88,6 +88,31 @@ void render_map(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y){
                     }
                     break;
                 }
+
+                if(appliances[i].timer_x == col && appliances[i].timer_y == line) {
+                    if(appliances[i].state == COOK_COOKING || appliances[i].state == COOK_READY) {
+                        // Converte o int time_left para char
+                        // Assumindo que o tempo é < 10 para 1 dígito, ou usamos 9 se for maior visualmente
+                        int t = appliances[i].time_left;
+                        if (t < 0) t = 0;
+                        if (t > 9) t = 9;
+                        
+                        char_to_render = '0' + t; 
+                        
+                        if(appliances[i].state == COOK_READY) {
+                             pair_color = NUMBER_COLOR_EMERGENCY; // Vermelho se vai queimar
+                        } else {
+                             pair_color = NUMBER_COLOR_WARNING; // Amarelo cozinhando
+                        }
+                        attr = A_BOLD;
+                    }
+                    // Se estiver OFF ou BURNT, mantém o 'n' ou desenha espaço?
+                    // O mapa original tem 'n'. Se quiser sumir com o 'n', descomente abaixo:
+                    else { 
+                        char_to_render = ' '; 
+                        
+                    } 
+                }
             }
 
             // Set color, attributes and render in position

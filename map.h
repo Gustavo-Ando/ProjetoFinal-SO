@@ -66,6 +66,8 @@ enum Appliance_type {
 
 typedef struct {
     int x, y;                 // Posição visual (onde muda o caracter)
+    int timer_x, timer_y;
+    int time_left;
     enum Appliance_type type; 
     Cook_status state;
     time_t start_time;

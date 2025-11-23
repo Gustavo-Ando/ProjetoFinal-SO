@@ -122,11 +122,13 @@ void process_message_appliance(char *message, THREAD_ARG_STRUCT *thread_arg){
     // Recupera dados da mensagem usando as novas funções
     int index = msgS_appliance_get_index(message);
     int status = msgS_appliance_get_status(message);
+    int time_left = msgS_appliance_get_time_left(message);
     
     pthread_mutex_lock(&thread_arg->players_mutex);
     
     if(index >= 0 && index < num_appliances) {
         appliances[index].state = status;
+        appliances[index].time_left = time_left;
         
         // Lógica para atualizar o Conteúdo visual baseado no Status e Tipo
         if (status == COOK_OFF) {

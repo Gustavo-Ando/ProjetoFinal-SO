@@ -22,7 +22,7 @@
 #define PORT 8080
 
 #define TIME_TO_COOK 5
-#define TIME_TO_BURN 15
+#define TIME_TO_BURN 14
 
 /*
     Thread to read data in master_socket
@@ -164,6 +164,7 @@ static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int in
                             thread_arg->clients[index].item = NONE; // Tira da mão
                             app->state = COOK_COOKING;
                             app->start_time = time(NULL);
+                            app->time_left = TIME_TO_COOK;
                             app_updated_index = app_id;
                         }
                     }
@@ -281,23 +282,35 @@ static void *game_loop_thread(void *arg) {
         
         for(int i = 0; i < num_appliances; i++) {
             int changed = 0;
+            int current_time_elapsed = (int)difftime(now, appliances[i].start_time);
+            int new_time_left = 0;
             
             // Estado: COZINHANDO -> PRONTO
             if (appliances[i].state == COOK_COOKING) {
-                if (difftime(now, appliances[i].start_time) >= TIME_TO_COOK) {
+                new_time_left = TIME_TO_COOK - current_time_elapsed;
+                if(new_time_left < 0) new_time_left = 0;
+
+                appliances[i].time_left = new_time_left; 
+                changed = 1; 
+
+                if (current_time_elapsed >= TIME_TO_COOK) {
                     appliances[i].state = COOK_READY;
-                    // Atualiza conteúdo lógico do servidor
                     appliances[i].content = (appliances[i].type == APP_OVEN) ? HAMBURGER_READY : FRIES_READY;
-                    changed = 1;
+                    appliances[i].time_left = TIME_TO_BURN - current_time_elapsed;
                 }
             } 
             // Estado: PRONTO -> QUEIMADO
             else if (appliances[i].state == COOK_READY) {
-                if (difftime(now, appliances[i].start_time) >= TIME_TO_BURN) {
+                new_time_left = TIME_TO_BURN - current_time_elapsed;
+                if(new_time_left < 0) new_time_left = 0;
+                
+                appliances[i].time_left = new_time_left;
+                changed = 1;
+
+                if (current_time_elapsed >= TIME_TO_BURN) {
                     appliances[i].state = COOK_BURNT;
-                    // Atualiza conteúdo lógico do servidor
                     appliances[i].content = (appliances[i].type == APP_OVEN) ? HAMBURGER_BURNED : FRIES_BURNED;
-                    changed = 1;
+                    appliances[i].time_left = 0;
                 }
             }
 

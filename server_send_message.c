@@ -119,14 +119,13 @@ void broadcast_player_item(THREAD_ARG_STRUCT *thread_arg, int index){
         - 
 */
 void broadcast_appliance_status(THREAD_ARG_STRUCT *thread_arg, int index){
-    // Access client CR
     pthread_mutex_lock(&thread_arg->clients_mutex);
     
-    // Busca o status atual direto da memória global
     int status = appliances[index].state;
+    int time_left = appliances[index].time_left;
 
     char message[MESSAGE_SIZE];
-    msgS_appliance(message, index, status);
+    msgS_appliance(message, index, status, time_left);
     
     for(int i = 0; i < MAX_PLAYERS; i++){
         if(thread_arg->clients[i].socket != 0) {

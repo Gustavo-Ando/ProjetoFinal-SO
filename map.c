@@ -121,6 +121,23 @@ void init_appliances() {
                 appliances[num_appliances].state = COOK_OFF;
                 appliances[num_appliances].start_time = 0;
                 appliances[num_appliances].content = NONE;
+                appliances[num_appliances].time_left = 0;
+                
+                // Lógica para achar o 'n' (Timer)
+                // Verifica acima
+                if(y > 0 && map[y-1][x] == 'n') {
+                    appliances[num_appliances].timer_x = x;
+                    appliances[num_appliances].timer_y = y-1;
+                }
+                // Verifica abaixo
+                else if(y < MAP_HEIGHT-1 && map[y+1][x] == 'n') {
+                    appliances[num_appliances].timer_x = x;
+                    appliances[num_appliances].timer_y = y+1;
+                } else {
+                    // Fallback se não achar
+                    appliances[num_appliances].timer_x = -1;
+                    appliances[num_appliances].timer_y = -1;
+                }
                 
                 if(c == 'O') appliances[num_appliances].type = APP_OVEN;
                 else appliances[num_appliances].type = APP_FRYER;

@@ -34,7 +34,7 @@ void msgS_players(char *message, int player_index, int status);
 void msgS_system(char *message, int player_index);
 void msgS_movement(char *message, int player_index, int x, int y);
 void msgS_item(char *message, int player_index, enum Item_type item_type);
-void msgS_appliance(char *message, int app_index, int status);
+void msgS_appliance(char *message, int app_index, int status, int time_left);
 void msgS_table(char *message, int table_index, enum Item_type item_type);
 void msgS_customer_arrival(char *message, int client_index, enum Item_type *order, int order_size);
 
@@ -61,6 +61,7 @@ enum Item_type msgS_item_get_item_type(char *message);
 
 int msgS_appliance_get_index(char *message);
 int msgS_appliance_get_status(char *message);
+int msgS_appliance_get_time_left(char *message);
 
 int msgS_table_get_table_index(char *message);
 enum Item_type msgS_table_get_item_type(char *message);
