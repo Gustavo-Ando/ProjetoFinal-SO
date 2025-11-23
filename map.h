@@ -38,18 +38,18 @@
 
 // Enum of item types and their rendered characters
 enum Item_type {
-    NONE = ' ',
-    BREAD = '=',
-    SALAD = '@',
-    JUICE = 'U',
-
-    HAMBURGER = '-',
-    HAMBURGER_BURNED = '~',
-    HAMBURGER_READY = 'E',
+    NONE = 0,
+    BREAD,
+    SALAD,
+    JUICE,
     
-    FRIES = 'W',
-    FRIES_READY = 'M',
-    FRIES_BURNED = 'K',
+    HAMBURGER,
+    HAMBURGER_BURNED,
+    HAMBURGER_READY,
+    
+    FRIES,
+    FRIES_READY,
+    FRIES_BURNED,
 };
 
 typedef enum {

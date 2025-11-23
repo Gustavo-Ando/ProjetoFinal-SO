@@ -30,14 +30,14 @@ void color_config(){
 
     // Itens
     init_pair(ITEM_COLOR_BREAD, COLOR_YELLOW, -1); // Bread
-    init_pair(ITEM_COLOR_HAMBURGER, COLOR_RED, -1); // Hamburger
+    init_pair(ITEM_COLOR_HAMBURGER, COLOR_WHITE, -1); // Hamburger
     init_pair(ITEM_COLOR_HAMBURGER_BURNED, COLOR_BLACK, -1); // Hamburger Burned
-    init_pair(ITEM_COLOR_HAMBURGER_READY, COLOR_YELLOW, -1); // Hamburger Ready
+    init_pair(ITEM_COLOR_HAMBURGER_READY, COLOR_RED, -1); // Hamburger Ready
     init_pair(ITEM_COLOR_SALAD, COLOR_GREEN, -1); // Salad
     init_pair(ITEM_COLOR_JUICE, COLOR_CYAN, -1); // Juice
     init_pair(ITEM_COLOR_FRIES, COLOR_WHITE, -1); // French Fries
     init_pair(ITEM_COLOR_FRIES_BURNED, COLOR_BLACK, -1); // French Fries Burned
-    init_pair(ITEM_COLOR_FRIES, COLOR_YELLOW, -1); // French Fries Ready
+    init_pair(ITEM_COLOR_FRIES_READY, COLOR_YELLOW, -1); // French Fries Ready
 
     // Numbers
     init_pair(NUMBER_COLOR_DEFAULT, COLOR_BLACK, COLOR_WHITE); // Default
@@ -50,6 +50,26 @@ void color_config(){
     init_pair(PLAYERS_COLOR_P2, COLOR_BLUE, -1); // P2
     init_pair(PLAYERS_COLOR_P3, COLOR_GREEN, -1); // P3
     init_pair(PLAYERS_COLOR_P4, COLOR_YELLOW, -1); // P4
+}
+
+char get_item_char(enum Item_type item) {
+    switch(item) {
+        case BREAD:             return '=';
+        case SALAD:             return '@';
+        case JUICE:             return 'U';
+
+        case HAMBURGER:         return '-';
+        case HAMBURGER_READY:   return '-';
+        case HAMBURGER_BURNED:  return '~';
+        
+        case FRIES:             return 'W';
+        case FRIES_READY:       return 'W';
+        case FRIES_BURNED:      return 'W'; 
+        
+        case NONE:              return ' ';
+        
+        default:                return (char)item;
+    }
 }
 
 /*
@@ -73,7 +93,7 @@ void render_map(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y){
             for(int i=0; i < num_appliances; i++) {
                 if(appliances[i].x == col && appliances[i].y == line) {
                     if(appliances[i].state != COOK_OFF) {
-                        char_to_render = (char)appliances[i].content; 
+                        char_to_render = get_item_char(appliances[i].content);
                         
                         // Ajuste de cor baseado no item
                         switch(appliances[i].content) {
@@ -164,7 +184,7 @@ void render_players(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y){
 
         // Render item
         attron(COLOR_PAIR(color_index));
-        mvaddch(start_y + thread_arg->players[i].last_y, start_x + thread_arg->players[i].last_x, thread_arg->players[i].item);
+        mvaddch(start_y + thread_arg->players[i].last_y, start_x + thread_arg->players[i].last_x, get_item_char(thread_arg->players[i].item));
         attroff(COLOR_PAIR(color_index));
     }
     pthread_mutex_unlock(&thread_arg->players_mutex);
