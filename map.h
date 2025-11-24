@@ -34,22 +34,33 @@
 #define PLAYERS_COLOR_P3 33
 #define PLAYERS_COLOR_P4 34
 
+#define ITEM_COLOR_BURGER_BREAD 40
+#define ITEM_COLOR_SALAD_BREAD 41
+#define ITEM_COLOR_FULL_BURGER 42
+#define ITEM_COLOR_SALAD_BURGER 43
+
 #define MAX_APPLIANCES 20
 
 // Enum of item types and their rendered characters
-enum Item_type {
+enum Item_type
+{
     NONE = 0,
     BREAD,
     SALAD,
     JUICE,
-    
+
     HAMBURGER,
     HAMBURGER_BURNED,
     HAMBURGER_READY,
-    
+
     FRIES,
     FRIES_READY,
     FRIES_BURNED,
+
+    BURGER_BREAD = 11,
+    SALAD_BREAD = 12,
+    SALAD_BURGER = 13,
+    FULL_BURGER = 14,
 };
 
 typedef enum
@@ -66,11 +77,12 @@ enum Appliance_type
     APP_FRYER = 2,
 };
 
-typedef struct {
-    int x, y;                 // Posição visual (onde muda o caracter)
+typedef struct
+{
+    int x, y; // Posição visual (onde muda o caracter)
     int timer_x, timer_y;
     int time_left;
-    enum Appliance_type type; 
+    enum Appliance_type type;
     Cook_status state;
     time_t start_time;
     enum Item_type content;
@@ -119,5 +131,7 @@ extern int counter_interaction_map[MAP_HEIGHT][MAP_WIDTH];
 
 void init_counters();
 int get_counter_id_at(int x, int y);
+
+extern enum Item_type try_combine(enum Item_type item1, enum Item_type item2);
 
 #endif

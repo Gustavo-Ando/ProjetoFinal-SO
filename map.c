@@ -124,25 +124,31 @@ void init_appliances()
                 appliances[num_appliances].start_time = 0;
                 appliances[num_appliances].content = NONE;
                 appliances[num_appliances].time_left = 0;
-                
+
                 // Lógica para achar o 'n' (Timer)
                 // Verifica acima
-                if(y > 0 && map[y-1][x] == 'n') {
+                if (y > 0 && map[y - 1][x] == 'n')
+                {
                     appliances[num_appliances].timer_x = x;
-                    appliances[num_appliances].timer_y = y-1;
+                    appliances[num_appliances].timer_y = y - 1;
                 }
                 // Verifica abaixo
-                else if(y < MAP_HEIGHT-1 && map[y+1][x] == 'n') {
+                else if (y < MAP_HEIGHT - 1 && map[y + 1][x] == 'n')
+                {
                     appliances[num_appliances].timer_x = x;
-                    appliances[num_appliances].timer_y = y+1;
-                } else {
+                    appliances[num_appliances].timer_y = y + 1;
+                }
+                else
+                {
                     // Fallback se não achar
                     appliances[num_appliances].timer_x = -1;
                     appliances[num_appliances].timer_y = -1;
                 }
-                
-                if(c == 'O') appliances[num_appliances].type = APP_OVEN;
-                else appliances[num_appliances].type = APP_FRYER;
+
+                if (c == 'O')
+                    appliances[num_appliances].type = APP_OVEN;
+                else
+                    appliances[num_appliances].type = APP_FRYER;
 
                 // Define onde o player interage (olha em volta)
                 int dx[] = {0, 0, -1, 1};
@@ -231,4 +237,30 @@ int get_counter_id_at(int x, int y)
         return -1;
 
     return counter_interaction_map[y][x];
+}
+
+enum Item_type try_combine(enum Item_type a, enum Item_type b)
+{
+    // pão + hambúrguer pronto
+    if ((a == BREAD && b == HAMBURGER_READY) ||
+        (b == BREAD && a == HAMBURGER_READY))
+        return BURGER_BREAD;
+
+    // pão + salada
+    if ((a == BREAD && b == SALAD) ||
+        (b == BREAD && a == SALAD))
+        return SALAD_BREAD;
+
+    // salada + hambúrguer pronto
+    if ((a == SALAD && b == HAMBURGER_READY) ||
+        (b == SALAD && a == HAMBURGER_READY))
+        return SALAD_BURGER;
+
+    // pão + hambúrguer + salada (ex: combinar BURGER_BREAD + SALAD ou SALAD_BREAD + HAMBURGER_READY ou SALAD_BURGER + BREAD)
+    if ((a == BURGER_BREAD && b == SALAD) || (a == SALAD && b == BURGER_BREAD) ||
+        (a == SALAD_BREAD && b == HAMBURGER_READY) || (a == HAMBURGER_READY && b == SALAD_BREAD) ||
+        (a == SALAD_BURGER && b == BREAD) || (a == BREAD && b == SALAD_BURGER))
+        return FULL_BURGER;
+
+    return NONE; // Não há combinação
 }

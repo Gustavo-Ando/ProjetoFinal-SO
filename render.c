@@ -31,15 +31,20 @@ void color_config()
     init_pair(MAP_COLOR_OVEN, COLOR_RED, -1);               // Oven
 
     // Itens
-    init_pair(ITEM_COLOR_BREAD, COLOR_YELLOW, -1); // Bread
-    init_pair(ITEM_COLOR_HAMBURGER, COLOR_WHITE, -1); // Hamburger
+    init_pair(ITEM_COLOR_BREAD, COLOR_YELLOW, -1);           // Bread
+    init_pair(ITEM_COLOR_HAMBURGER, COLOR_WHITE, -1);        // Hamburger
     init_pair(ITEM_COLOR_HAMBURGER_BURNED, COLOR_BLACK, -1); // Hamburger Burned
-    init_pair(ITEM_COLOR_HAMBURGER_READY, COLOR_RED, -1); // Hamburger Ready
-    init_pair(ITEM_COLOR_SALAD, COLOR_GREEN, -1); // Salad
-    init_pair(ITEM_COLOR_JUICE, COLOR_CYAN, -1); // Juice
-    init_pair(ITEM_COLOR_FRIES, COLOR_WHITE, -1); // French Fries
-    init_pair(ITEM_COLOR_FRIES_BURNED, COLOR_BLACK, -1); // French Fries Burned
-    init_pair(ITEM_COLOR_FRIES_READY, COLOR_YELLOW, -1); // French Fries Ready
+    init_pair(ITEM_COLOR_HAMBURGER_READY, COLOR_RED, -1);    // Hamburger Ready
+    init_pair(ITEM_COLOR_SALAD, COLOR_GREEN, -1);            // Salad
+    init_pair(ITEM_COLOR_JUICE, COLOR_CYAN, -1);             // Juice
+    init_pair(ITEM_COLOR_FRIES, COLOR_WHITE, -1);            // French Fries
+    init_pair(ITEM_COLOR_FRIES_BURNED, COLOR_BLACK, -1);     // French Fries Burned
+    init_pair(ITEM_COLOR_FRIES_READY, COLOR_YELLOW, -1);     // French Fries Ready
+
+    init_pair(ITEM_COLOR_BURGER_BREAD, COLOR_RED, -1);   // Burger with Bread
+    init_pair(ITEM_COLOR_SALAD_BREAD, COLOR_GREEN, -1);  // Salad with Bread
+    init_pair(ITEM_COLOR_FULL_BURGER, COLOR_RED, -1);    // Full Burger
+    init_pair(ITEM_COLOR_SALAD_BURGER, COLOR_GREEN, -1); // Salad Burger
 
     // Numbers
     init_pair(NUMBER_COLOR_DEFAULT, COLOR_BLACK, COLOR_WHITE);  // Default
@@ -54,23 +59,45 @@ void color_config()
     init_pair(PLAYERS_COLOR_P4, COLOR_YELLOW, -1);      // P4
 }
 
-char get_item_char(enum Item_type item) {
-    switch(item) {
-        case BREAD:             return '=';
-        case SALAD:             return '@';
-        case JUICE:             return 'U';
+char get_item_char(enum Item_type item)
+{
+    switch (item)
+    {
+    case BREAD:
+        return '=';
+    case SALAD:
+        return '@';
+    case JUICE:
+        return 'U';
 
-        case HAMBURGER:         return '-';
-        case HAMBURGER_READY:   return '-';
-        case HAMBURGER_BURNED:  return '~';
-        
-        case FRIES:             return 'W';
-        case FRIES_READY:       return 'W';
-        case FRIES_BURNED:      return 'W'; 
-        
-        case NONE:              return ' ';
-        
-        default:                return (char)item;
+    case HAMBURGER:
+        return '-';
+    case HAMBURGER_READY:
+        return '-';
+    case HAMBURGER_BURNED:
+        return '~';
+
+    case FRIES:
+        return 'W';
+    case FRIES_READY:
+        return 'W';
+    case FRIES_BURNED:
+        return 'W';
+
+    case BURGER_BREAD:
+        return '=';
+    case SALAD_BREAD:
+        return '=';
+    case SALAD_BURGER:
+        return '*';
+    case FULL_BURGER:
+        return '#';
+
+    case NONE:
+        return ' ';
+
+    default:
+        return (char)item;
     }
 }
 
@@ -95,11 +122,14 @@ void render_map(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
             int pair_color = color_map[line][col];
             int attr = attr_map[line][col];
 
-            for(int i=0; i < num_appliances; i++) {
-                if(appliances[i].x == col && appliances[i].y == line) {
-                    if(appliances[i].state != COOK_OFF) {
+            for (int i = 0; i < num_appliances; i++)
+            {
+                if (appliances[i].x == col && appliances[i].y == line)
+                {
+                    if (appliances[i].state != COOK_OFF)
+                    {
                         char_to_render = get_item_char(appliances[i].content);
-                        
+
                         // Ajuste de cor baseado no item
                         switch (appliances[i].content)
                         {
@@ -128,29 +158,36 @@ void render_map(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
                     break;
                 }
 
-                if(appliances[i].timer_x == col && appliances[i].timer_y == line) {
-                    if(appliances[i].state == COOK_COOKING || appliances[i].state == COOK_READY) {
+                if (appliances[i].timer_x == col && appliances[i].timer_y == line)
+                {
+                    if (appliances[i].state == COOK_COOKING || appliances[i].state == COOK_READY)
+                    {
                         // Converte o int time_left para char
                         // Assumindo que o tempo é < 10 para 1 dígito, ou usamos 9 se for maior visualmente
                         int t = appliances[i].time_left;
-                        if (t < 0) t = 0;
-                        if (t > 9) t = 9;
-                        
-                        char_to_render = '0' + t; 
-                        
-                        if(appliances[i].state == COOK_READY) {
-                             pair_color = NUMBER_COLOR_EMERGENCY; // Vermelho se vai queimar
-                        } else {
-                             pair_color = NUMBER_COLOR_WARNING; // Amarelo cozinhando
+                        if (t < 0)
+                            t = 0;
+                        if (t > 9)
+                            t = 9;
+
+                        char_to_render = '0' + t;
+
+                        if (appliances[i].state == COOK_READY)
+                        {
+                            pair_color = NUMBER_COLOR_EMERGENCY; // Vermelho se vai queimar
+                        }
+                        else
+                        {
+                            pair_color = NUMBER_COLOR_WARNING; // Amarelo cozinhando
                         }
                         attr = A_BOLD;
                     }
                     // Se estiver OFF ou BURNT, mantém o 'n' ou desenha espaço?
                     // O mapa original tem 'n'. Se quiser sumir com o 'n', descomente abaixo:
-                    else { 
-                        char_to_render = ' '; 
-                        
-                    } 
+                    else
+                    {
+                        char_to_render = ' ';
+                    }
                 }
             }
 
@@ -194,6 +231,18 @@ void render_map(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
                         case FRIES_BURNED:
                             pair_color = ITEM_COLOR_FRIES_BURNED;
                             break;
+                        case BURGER_BREAD:
+                            pair_color = ITEM_COLOR_BURGER_BREAD;
+                            break;
+                        case SALAD_BREAD:
+                            pair_color = ITEM_COLOR_SALAD_BREAD;
+                            break;
+                        case SALAD_BURGER:
+                            pair_color = ITEM_COLOR_SALAD_BURGER;
+                            break;
+                        case FULL_BURGER:
+                            pair_color = ITEM_COLOR_FULL_BURGER;
+                            break;
                         default:
                             break;
                         }
@@ -201,8 +250,8 @@ void render_map(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
                     else
                     {
                         // bancada vazia – mantém o símbolo | original
-                        char_to_render = '|';
-                        pair_color = MAP_COLOR_DEFAULT;
+                        char_to_render = map[line][col];
+                        pair_color = color_map[line][col];
                     }
 
                     break; // Encontrou a bancada, não precisa checar o resto
@@ -275,6 +324,18 @@ void render_players(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
             break;
         case FRIES_READY:
             color_index = 18;
+            break;
+        case BURGER_BREAD:
+            color_index = 40;
+            break;
+        case SALAD_BREAD:
+            color_index = 41;
+            break;
+        case FULL_BURGER:
+            color_index = 42;
+            break;
+        case SALAD_BURGER:
+            color_index = 43;
             break;
         case NONE:
             color_index = 0;

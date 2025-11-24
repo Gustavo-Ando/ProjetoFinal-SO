@@ -108,127 +108,196 @@ static void *read_master_socket(void *args)
     Return:
         -
 */
-static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int index){
+static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int index)
+{
     pthread_mutex_lock(&thread_arg->clients_mutex);
-    
+
     int try_moved = 0, try_action = 0;
     int app_updated_index = -1;
     int counter_updated_index = -1;
 
-    switch(input) {
-        // Movimentacao (W, A, S, D)
-        case 'w':
-            try_moved = 1;
-            if(!(game_map[thread_arg->clients[index].y - 1][thread_arg->clients[index].x])) 
-                thread_arg->clients[index].y--;
-            break;
-        case 'a':
-            try_moved = 1;
-            if(!(game_map[thread_arg->clients[index].y][thread_arg->clients[index].x - 2])) 
-                thread_arg->clients[index].x -= 2;
-            break;
-        case 's':
-            try_moved = 1;
-            if(!(game_map[thread_arg->clients[index].y + 1][thread_arg->clients[index].x])) 
-                thread_arg->clients[index].y++;
-            break;
-        case 'd':
-            try_moved = 1;
-            if(!(game_map[thread_arg->clients[index].y][thread_arg->clients[index].x + 2])) 
-                thread_arg->clients[index].x += 2;
-            break;
+    switch (input)
+    {
+    // Movimentacao (W, A, S, D)
+    case 'w':
+        try_moved = 1;
+        if (!(game_map[thread_arg->clients[index].y - 1][thread_arg->clients[index].x]))
+            thread_arg->clients[index].y--;
+        break;
+    case 'a':
+        try_moved = 1;
+        if (!(game_map[thread_arg->clients[index].y][thread_arg->clients[index].x - 2]))
+            thread_arg->clients[index].x -= 2;
+        break;
+    case 's':
+        try_moved = 1;
+        if (!(game_map[thread_arg->clients[index].y + 1][thread_arg->clients[index].x]))
+            thread_arg->clients[index].y++;
+        break;
+    case 'd':
+        try_moved = 1;
+        if (!(game_map[thread_arg->clients[index].y][thread_arg->clients[index].x + 2]))
+            thread_arg->clients[index].x += 2;
+        break;
 
-        // Interacao
-        case ' ':
-            try_action = 1;
-            int px = thread_arg->clients[index].x;
-            int py = thread_arg->clients[index].y;
+    // Interacao
+    case ' ':
+        try_action = 1;
+        int px = thread_arg->clients[index].x;
+        int py = thread_arg->clients[index].y;
 
-            // Pegar itens do chão
-            if(item_map[py][px] != NONE && thread_arg->clients[index].item == NONE){
-                thread_arg->clients[index].item = item_map[py][px];
+        // Pegar itens do chão
+        if (item_map[py][px] != NONE && thread_arg->clients[index].item == NONE)
+        {
+            thread_arg->clients[index].item = item_map[py][px];
+        }
+        else if (item_map[py][px] != NONE && thread_arg->clients[index].item != NONE)
+        {
+            enum Item_type p_item = thread_arg->clients[index].item;
+            enum Item_type g_item = item_map[py][px];
+
+            enum Item_type combined = try_combine(p_item, g_item);
+
+            if (combined != NONE)
+            {
+                thread_arg->clients[index].item = combined;
             }
-            // Jogar no Lixo
-            else if(trash_map[py][px]){
-                thread_arg->clients[index].item = NONE;
-            }
-            // Interação com Objetos (Máquinas e Bancadas)
-            else {
-                int app_id = get_appliance_id_at(px, py);
-                int c_id = get_counter_id_at(px, py);
+        }
+        // Jogar no Lixo
+        else if (trash_map[py][px])
+        {
+            thread_arg->clients[index].item = NONE;
+        }
+        // Interação com Objetos (Máquinas e Bancadas)
+        else
+        {
+            int app_id = get_appliance_id_at(px, py);
+            int c_id = get_counter_id_at(px, py);
 
-                // Fogao/Fritadeira
-                if(app_id != -1) {
-                    Appliance *app = &appliances[app_id];
-                    enum Item_type p_item = thread_arg->clients[index].item;
+            // Fogao/Fritadeira
+            if (app_id != -1)
+            {
+                Appliance *app = &appliances[app_id];
+                enum Item_type p_item = thread_arg->clients[index].item;
 
-                    if(app->state == COOK_OFF) {
-                        int success = 0;
-                        if(app->type == APP_OVEN && p_item == HAMBURGER) {
-                            app->content = HAMBURGER;
-                            success = 1;
-                        } else if(app->type == APP_FRYER && p_item == FRIES) {
-                            app->content = FRIES;
-                            success = 1;
-                        }
+                // Se appliance tem item e jogador tem item → TENTAR COMBINAR
+                if (p_item != NONE && app->content != NONE)
+                {
+                    enum Item_type combined = try_combine(p_item, app->content);
 
-                        if(success) {
-                            thread_arg->clients[index].item = NONE;
-                            app->state = COOK_COOKING;
-                            app->start_time = time(NULL);
-                            
-                            app->time_left = TIME_TO_COOK; 
-                            
-                            app_updated_index = app_id;
-                        }
-                    }
-                    else if ((app->state != COOK_OFF) && p_item == NONE) {
-                        thread_arg->clients[index].item = app->content;
+                    if (combined != NONE)
+                    {
+                        // Monta os itens combinados na mão do jogador
+                        thread_arg->clients[index].item = combined;
                         app->state = COOK_OFF;
                         app->content = NONE;
                         app->time_left = 0;
                         app_updated_index = app_id;
+                        break;
                     }
                 }
-                
-                // Bancada
-                else if (c_id != -1) {
-                    Counter *c = &counters[c_id];
-                    enum Item_type p_item = thread_arg->clients[index].item;
 
-                    if (p_item != NONE && c->content == NONE) {
-                        c->content = p_item;
-                        thread_arg->clients[index].item = NONE;
-                        counter_updated_index = c_id; 
-                    } 
-                    else if (p_item == NONE && c->content != NONE) {
-                        thread_arg->clients[index].item = c->content;
-                        c->content = NONE;
-                        counter_updated_index = c_id;
+                // Jogador coloca item CRU no appliance (regra original)
+                if (app->state == COOK_OFF)
+                {
+                    int success = 0;
+
+                    // Regras originais
+                    if (app->type == APP_OVEN && p_item == HAMBURGER)
+                    {
+                        app->content = HAMBURGER;
+                        success = 1;
                     }
+                    else if (app->type == APP_FRYER && p_item == FRIES)
+                    {
+                        app->content = FRIES;
+                        success = 1;
+                    }
+
+                    if (success)
+                    {
+                        thread_arg->clients[index].item = NONE;
+                        app->state = COOK_COOKING;
+                        app->start_time = time(NULL);
+                        app->time_left = TIME_TO_COOK;
+                        app_updated_index = app_id;
+                        break;
+                    }
+                }
+
+                // Jogador pega o item do appliance (somente se não está cozinhando)
+                if ((app->state != COOK_COOKING) && p_item == NONE)
+                {
+                    thread_arg->clients[index].item = app->content;
+                    app->state = COOK_OFF;
+                    app->content = NONE;
+                    app->time_left = 0;
+                    app_updated_index = app_id;
+                    break;
                 }
             }
-            break;
-            
-        default:
-            break;
+
+            // Bancada
+            else if (c_id != -1)
+            {
+                Counter *c = &counters[c_id];
+                enum Item_type p_item = thread_arg->clients[index].item;
+                enum Item_type c_item = c->content;
+
+                // Caso: Jogador segurando algo e bancada com algo → tentar combinar
+                if (p_item != NONE && c_item != NONE)
+                {
+                    enum Item_type combined = try_combine(p_item, c_item);
+
+                    if (combined != NONE)
+                    {
+                        // combinação fica na bancada
+                        // (põe na bancada a combinação e limpa mão)
+                        thread_arg->clients[index].item = NONE;
+                        c->content = combined;
+                        counter_updated_index = c_id;
+                    }
+                    // Caso contrário, nada acontece
+                }
+
+                // Jogador segurando item e bancada vazia → deposita
+                else if (p_item != NONE && c_item == NONE)
+                {
+                    c->content = p_item;
+                    thread_arg->clients[index].item = NONE;
+                    counter_updated_index = c_id;
+                }
+
+                // Jogador sem item e bancada com item → pega
+                else if (p_item == NONE && c_item != NONE)
+                {
+                    thread_arg->clients[index].item = c_item;
+                    c->content = NONE;
+                    counter_updated_index = c_id;
+                }
+            }
+        }
+        break;
+
+    default:
+        break;
     }
-    
+
     printf("Received input from client %d: %c\n", index, input);
     printf(" - %d, %d\n", thread_arg->clients[index].x, thread_arg->clients[index].y);
-    
+
     pthread_mutex_unlock(&thread_arg->clients_mutex);
-    
-    if(try_moved) 
+
+    if (try_moved)
         broadcast_player_position(thread_arg, index);
-        
-    if(try_action) 
+
+    if (try_action)
         broadcast_player_item(thread_arg, index);
-        
-    if(app_updated_index != -1) 
+
+    if (app_updated_index != -1)
         broadcast_appliance_status(thread_arg, app_updated_index);
-    
-    if(counter_updated_index != -1) 
+
+    if (counter_updated_index != -1)
         broadcast_counter_update(thread_arg, counter_updated_index);
 }
 
@@ -330,30 +399,36 @@ static void *game_loop_thread(void *arg)
             int changed = 0;
             int current_time_elapsed = (int)difftime(now, appliances[i].start_time);
             int new_time_left = 0;
-            
+
             // Estado: COZINHANDO -> PRONTO
-            if (appliances[i].state == COOK_COOKING) {
+            if (appliances[i].state == COOK_COOKING)
+            {
                 new_time_left = TIME_TO_COOK - current_time_elapsed;
-                if(new_time_left < 0) new_time_left = 0;
+                if (new_time_left < 0)
+                    new_time_left = 0;
 
-                appliances[i].time_left = new_time_left; 
-                changed = 1; 
+                appliances[i].time_left = new_time_left;
+                changed = 1;
 
-                if (current_time_elapsed >= TIME_TO_COOK) {
+                if (current_time_elapsed >= TIME_TO_COOK)
+                {
                     appliances[i].state = COOK_READY;
                     appliances[i].content = (appliances[i].type == APP_OVEN) ? HAMBURGER_READY : FRIES_READY;
                     appliances[i].time_left = TIME_TO_BURN - current_time_elapsed;
                 }
             }
             // Estado: PRONTO -> QUEIMADO
-            else if (appliances[i].state == COOK_READY) {
+            else if (appliances[i].state == COOK_READY)
+            {
                 new_time_left = TIME_TO_BURN - current_time_elapsed;
-                if(new_time_left < 0) new_time_left = 0;
-                
+                if (new_time_left < 0)
+                    new_time_left = 0;
+
                 appliances[i].time_left = new_time_left;
                 changed = 1;
 
-                if (current_time_elapsed >= TIME_TO_BURN) {
+                if (current_time_elapsed >= TIME_TO_BURN)
+                {
                     appliances[i].state = COOK_BURNT;
                     appliances[i].content = (appliances[i].type == APP_OVEN) ? HAMBURGER_BURNED : FRIES_BURNED;
                     appliances[i].time_left = 0;

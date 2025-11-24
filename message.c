@@ -243,8 +243,9 @@ enum Item_type msgS_item_get_item_type(char *message)
     Function to create message containing the given appliance's status
     message[0] is the message code, message[1] contains the appliance index, message[2] contains the status
 */
-void msgS_appliance(char *message, int app_index, int status, int time_left){
-    message[0] = APPLIANCE; 
+void msgS_appliance(char *message, int app_index, int status, int time_left)
+{
+    message[0] = APPLIANCE;
     message[1] = '0' + app_index;
     message[2] = status;
     message[3] = '0' + time_left;
@@ -308,13 +309,14 @@ int msgS_counter_get_counter_index(char *message)
 */
 enum Item_type msgS_counter_get_item_type(char *message)
 {
-    return message[2]- '0';
+    return message[2] - '0';
 }
 
 /*
     Function to get the appliance's time from an appliance-type message
 */
-int msgS_appliance_get_time_left(char *message){
+int msgS_appliance_get_time_left(char *message)
+{
     return message[3] - '0';
 }
 
