@@ -1,33 +1,24 @@
 #ifndef MESSAGE_H
 #define MESSAGE_H
 
-#define MESSAGE_SIZE 128
+#define MESSAGE_SIZE 1024
 
 #include "map.h"
 
-enum Message_type
-{
+enum Message_type {
     // CLIENT MESSAGES
-    INPUT = 'i',      // Input
-    CONNECTION = 'c', // Connects or leaves server
+    MSG_INPUT = 'i',      // Input
+    MSG_CONNECTION = 'c', // Connects or leaves server
 
     // SERVER MESSAGES
-    PLAYERS = 'P',   // Player join or leave server
-    SYSTEM = 'S',    // Player index
-    MOVEMENT = 'M',  // Player position
-    ITEM = 'I',      // Player get or lose item
-    APPLIANCE = 'O', // APPLIANCE start, ready, burns or empties
-    COUNTER = 'K',   // COUNTER with or without item
-    TABLE = 'T',     // Item left, taken from the table
-    CUSTOMER = 'C',  // Customer arrive, receive order, or leaves
-};
-
-enum Cook_status
-{
-    EMPTY = 'E',   // Empty oven (player can start oven)
-    COOKING = 'C', // Cooking food (cannot get item)
-    READY = 'R',   // Food ready (player can get item)
-    BURNED = 'B',  // Food burned (player can get burneed item)
+    MSG_PLAYERS = 'P',   // Player join or leave server
+    MSG_SYSTEM = 'S',    // Player index
+    MSG_MOVEMENT = 'M',  // Player position
+    MSG_ITEM = 'I',      // Player get or lose item
+    MSG_APPLIANCE = 'O', // APPLIANCE start, ready, burns or empties
+    MSG_COUNTER = 'K',   // COUNTER with or without item
+    MSG_TABLE = 'T',     // Item left, taken from the table
+    MSG_CUSTOMER = 'C',  // Customer arrive, receive order, or leaves
 };
 
 void msgC_input(char *message, char input);

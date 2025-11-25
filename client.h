@@ -27,6 +27,14 @@ typedef struct __thread_arg_struct {
     int current_debug_line; // Index of current debug line
     pthread_mutex_t debug_mutex; // Mutex to access debug lines
 
+    APPLIANCE appliances[MAX_APPLIANCES]; // Array of appliances (Oven/Frier)
+    int num_appliances; // Number of appliances
+    pthread_mutex_t appliances_mutex; // Mutex to access appliances' shared data
+
+    COUNTER counters[MAX_COUNTERS]; // Array of counters
+    int num_counters; // Number of counters
+    pthread_mutex_t counters_mutex; // Mutex to access counters' shared data
+
     int client_fd; // Client socket
 } THREAD_ARG_STRUCT;
 

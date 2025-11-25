@@ -11,3 +11,6 @@
 Para compilar o programa basta usar o comando `make all` em seu terminal.
 
 Em seguida, deve-se executar o comando `./server.out` para criar um servidor, e, em outros terminais deve se executar `./client.out` para rodar o jogo como um cliente. São suportados até 4 jogadores ao mesmo tempo.
+
+# TODO
+Deadlock

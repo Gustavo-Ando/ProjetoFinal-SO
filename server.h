@@ -20,6 +20,14 @@ typedef struct thread_arg_struct {
     int connected; // Number of connected clients
     pthread_mutex_t clients_mutex; // Mutex to access client list
     
+    APPLIANCE appliances[MAX_APPLIANCES]; // Array of appliances (Oven/Frier)
+    int num_appliances; // Number of appliances
+    pthread_mutex_t appliances_mutex; // Mutex to access appliances' shared data
+
+    COUNTER counters[MAX_COUNTERS]; // Array of counters
+    int num_counters; // Number of counters
+    pthread_mutex_t counters_mutex; // Mutex to access counters' shared data
+
     struct sockaddr_in address; // Socket incoming address
 } THREAD_ARG_STRUCT;
 

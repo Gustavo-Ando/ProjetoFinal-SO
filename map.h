@@ -42,9 +42,8 @@
 #define MAX_APPLIANCES 20
 
 // Enum of item types and their rendered characters
-enum Item_type
-{
-    NONE = 0,
+enum Item_type {
+    NONE,
     BREAD,
     SALAD,
     JUICE,
@@ -57,42 +56,38 @@ enum Item_type
     FRIES_READY,
     FRIES_BURNED,
 
-    BURGER_BREAD = 11,
-    SALAD_BREAD = 12,
-    SALAD_BURGER = 13,
-    FULL_BURGER = 14,
+    BURGER_BREAD,
+    SALAD_BREAD,
+    SALAD_BURGER,
+    FULL_BURGER,
 };
 
-typedef enum
-{
-    COOK_OFF = 0,
-    COOK_COOKING = 1,
-    COOK_READY = 2,
-    COOK_BURNT = 3,
-} Cook_status;
+enum Cook_status {
+    EMPTY = 'E',   // Empty oven (player can start oven)
+    COOKING = 'C', // Cooking food (cannot get item)
+    READY = 'R',   // Food ready (player can get item)
+    BURNED = 'B',  // Food burned (player can get burneed item)
+};
 
-enum Appliance_type
-{
+enum Appliance_type {
     APP_OVEN = 1,
     APP_FRYER = 2,
 };
 
-typedef struct
-{
+typedef struct {
     int x, y; // Posição visual (onde muda o caracter)
     int timer_x, timer_y;
     int time_left;
     enum Appliance_type type;
-    Cook_status state;
+    enum Cook_status state;
     time_t start_time;
     enum Item_type content;
-} Appliance;
+} APPLIANCE;
 
-typedef struct
-{
+typedef struct {
     int x, y; // Posição visual (onde muda o caracter)
     enum Item_type content;
-} Counter;
+} COUNTER;
 
 #define MAX_COUNTERS 32
 
@@ -119,19 +114,15 @@ extern enum Item_type item_map[MAP_HEIGHT][MAP_WIDTH];
 extern int trash_map[MAP_HEIGHT][MAP_WIDTH];
 
 extern int appliance_interaction_map[MAP_HEIGHT][MAP_WIDTH];
-extern Appliance appliances[MAX_APPLIANCES];
-extern int num_appliances;
 
-void init_appliances();
+int init_appliances(APPLIANCE appliances[MAX_APPLIANCES]);
 int get_appliance_id_at(int x, int y);
 
-extern Counter counters[MAX_COUNTERS];
-extern int num_counters;
 extern int counter_interaction_map[MAP_HEIGHT][MAP_WIDTH];
 
-void init_counters();
+int init_counters(COUNTER counters[MAX_COUNTERS]);
 int get_counter_id_at(int x, int y);
 
-extern enum Item_type try_combine(enum Item_type item1, enum Item_type item2);
+enum Item_type try_combine(enum Item_type item1, enum Item_type item2);
 
 #endif

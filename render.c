@@ -13,10 +13,8 @@
     Return:
         -
 */
-void color_config()
-{
-    if (!has_colors())
-        return;
+void color_config() {
+    if (!has_colors()) return;
 
     // Start color and use default terminal colors
     start_color();
@@ -59,46 +57,49 @@ void color_config()
     init_pair(PLAYERS_COLOR_P4, COLOR_YELLOW, -1);      // P4
 }
 
-char get_item_char(enum Item_type item)
-{
-    switch (item)
-    {
-    case BREAD:
-        return '=';
-    case SALAD:
-        return '@';
-    case JUICE:
-        return 'U';
-
-    case HAMBURGER:
-        return '-';
-    case HAMBURGER_READY:
-        return '-';
-    case HAMBURGER_BURNED:
-        return '~';
-
-    case FRIES:
-        return 'W';
-    case FRIES_READY:
-        return 'W';
-    case FRIES_BURNED:
-        return 'W';
-
-    case BURGER_BREAD:
-        return '=';
-    case SALAD_BREAD:
-        return '=';
-    case SALAD_BURGER:
-        return '*';
-    case FULL_BURGER:
-        return '#';
-
-    case NONE:
-        return ' ';
-
-    default:
-        return (char)item;
+char get_item_char(enum Item_type item) {
+    switch (item) {
+        case BREAD: return '=';
+        case SALAD: return '@';
+        case JUICE: return 'U';
+    
+        case HAMBURGER: return '-';
+        case HAMBURGER_READY: return '-';
+        case HAMBURGER_BURNED: return '~';
+    
+        case FRIES: return 'W';
+        case FRIES_READY: return 'W';
+        case FRIES_BURNED: return 'W';
+    
+        case BURGER_BREAD: return '=';
+        case SALAD_BREAD: return '=';
+        case SALAD_BURGER: return '*';
+        case FULL_BURGER: return '#';
+    
+        case NONE: return ' ';
+    
+        default: return (char)item;
     }
+}
+
+int get_item_color(enum Item_type item){
+   switch (item){
+       case NONE: return MAP_COLOR_DEFAULT;
+       case BREAD: return ITEM_COLOR_BREAD;
+       case HAMBURGER: return ITEM_COLOR_HAMBURGER;
+       case HAMBURGER_READY: return ITEM_COLOR_HAMBURGER_READY;
+       case HAMBURGER_BURNED: return ITEM_COLOR_HAMBURGER_BURNED;
+       case SALAD: return ITEM_COLOR_SALAD;
+       case JUICE: return ITEM_COLOR_JUICE;
+       case FRIES: return ITEM_COLOR_FRIES;
+       case FRIES_READY: return ITEM_COLOR_FRIES_READY;
+       case FRIES_BURNED: return ITEM_COLOR_FRIES_BURNED;
+       case BURGER_BREAD: return ITEM_COLOR_BURGER_BREAD;
+       case SALAD_BREAD: return ITEM_COLOR_SALAD_BREAD;
+       case SALAD_BURGER: return ITEM_COLOR_SALAD_BURGER;
+       case FULL_BURGER: return ITEM_COLOR_FULL_BURGER;
+       default: return MAP_COLOR_DEFAULT;
+   }
 }
 
 /*
@@ -111,156 +112,16 @@ char get_item_char(enum Item_type item)
     Return:
         -
 */
-void render_map(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
-{
+void render_map(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y) {
     // For each character
-    for (int line = 0; line < MAP_HEIGHT; line++)
-    {
-        for (int col = 0; col < MAP_WIDTH; col++)
-        {
-            char char_to_render = map[line][col];
+    for (int line = 0; line < MAP_HEIGHT; line++) {
+        for (int col = 0; col < MAP_WIDTH; col++) {
             int pair_color = color_map[line][col];
             int attr = attr_map[line][col];
 
-            for (int i = 0; i < num_appliances; i++)
-            {
-                if (appliances[i].x == col && appliances[i].y == line)
-                {
-                    if (appliances[i].state != COOK_OFF)
-                    {
-                        char_to_render = get_item_char(appliances[i].content);
-
-                        // Ajuste de cor baseado no item
-                        switch (appliances[i].content)
-                        {
-                        case HAMBURGER:
-                            pair_color = ITEM_COLOR_HAMBURGER;
-                            break;
-                        case HAMBURGER_READY:
-                            pair_color = ITEM_COLOR_HAMBURGER_READY;
-                            break;
-                        case HAMBURGER_BURNED:
-                            pair_color = ITEM_COLOR_HAMBURGER_BURNED;
-                            break;
-                        case FRIES:
-                            pair_color = ITEM_COLOR_FRIES;
-                            break;
-                        case FRIES_READY:
-                            pair_color = ITEM_COLOR_FRIES_READY;
-                            break;
-                        case FRIES_BURNED:
-                            pair_color = ITEM_COLOR_FRIES_BURNED;
-                            break;
-                        default:
-                            break;
-                        }
-                    }
-                    break;
-                }
-
-                if (appliances[i].timer_x == col && appliances[i].timer_y == line)
-                {
-                    if (appliances[i].state == COOK_COOKING || appliances[i].state == COOK_READY)
-                    {
-                        // Converte o int time_left para char
-                        // Assumindo que o tempo é < 10 para 1 dígito, ou usamos 9 se for maior visualmente
-                        int t = appliances[i].time_left;
-                        if (t < 0)
-                            t = 0;
-                        if (t > 9)
-                            t = 9;
-
-                        char_to_render = '0' + t;
-
-                        if (appliances[i].state == COOK_READY)
-                        {
-                            pair_color = NUMBER_COLOR_EMERGENCY; // Vermelho se vai queimar
-                        }
-                        else
-                        {
-                            pair_color = NUMBER_COLOR_WARNING; // Amarelo cozinhando
-                        }
-                        attr = A_BOLD;
-                    }
-                    // Se estiver OFF ou BURNT, mantém o 'n' ou desenha espaço?
-                    // O mapa original tem 'n'. Se quiser sumir com o 'n', descomente abaixo:
-                    else
-                    {
-                        char_to_render = ' ';
-                    }
-                }
-            }
-
-            // --- COUNTERS (BANCADAS) ---
-            for (int i = 0; i < num_counters; i++)
-            {
-                if (counters[i].x == col && counters[i].y == line)
-                {
-                    // Se a bancada tiver item, renderiza o item
-                    if (counters[i].content != NONE)
-                    {
-                        char_to_render = get_item_char(counters[i].content);
-
-                        // Ajuste de cor baseado no item
-                        switch (counters[i].content)
-                        {
-                        case BREAD:
-                            pair_color = ITEM_COLOR_BREAD;
-                            break;
-                        case HAMBURGER:
-                            pair_color = ITEM_COLOR_HAMBURGER;
-                            break;
-                        case HAMBURGER_READY:
-                            pair_color = ITEM_COLOR_HAMBURGER_READY;
-                            break;
-                        case HAMBURGER_BURNED:
-                            pair_color = ITEM_COLOR_HAMBURGER_BURNED;
-                            break;
-                        case SALAD:
-                            pair_color = ITEM_COLOR_SALAD;
-                            break;
-                        case JUICE:
-                            pair_color = ITEM_COLOR_JUICE;
-                            break;
-                        case FRIES:
-                            pair_color = ITEM_COLOR_FRIES;
-                            break;
-                        case FRIES_READY:
-                            pair_color = ITEM_COLOR_FRIES_READY;
-                            break;
-                        case FRIES_BURNED:
-                            pair_color = ITEM_COLOR_FRIES_BURNED;
-                            break;
-                        case BURGER_BREAD:
-                            pair_color = ITEM_COLOR_BURGER_BREAD;
-                            break;
-                        case SALAD_BREAD:
-                            pair_color = ITEM_COLOR_SALAD_BREAD;
-                            break;
-                        case SALAD_BURGER:
-                            pair_color = ITEM_COLOR_SALAD_BURGER;
-                            break;
-                        case FULL_BURGER:
-                            pair_color = ITEM_COLOR_FULL_BURGER;
-                            break;
-                        default:
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        // bancada vazia – mantém o símbolo | original
-                        char_to_render = map[line][col];
-                        pair_color = color_map[line][col];
-                    }
-
-                    break; // Encontrou a bancada, não precisa checar o resto
-                }
-            }
-
             // Set color, attributes and render in position
             attron(COLOR_PAIR(pair_color) | attr);
-            mvaddch(start_y + line, start_x + col, char_to_render);
+            mvaddch(start_y + line, start_x + col, map[line][col]);
             attroff(COLOR_PAIR(pair_color) | attr);
         }
     }
@@ -283,8 +144,7 @@ void render_players(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
     for (int i = 0; i < MAX_PLAYERS; i++)
     {
         // Check if player is connected
-        if (!thread_arg->players[i].is_active)
-            continue;
+        if (!thread_arg->players[i].is_active) continue;
 
         // Render player
         attron(COLOR_PAIR(30 + 1 + i) | A_BOLD);
@@ -292,55 +152,9 @@ void render_players(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
         attroff(COLOR_PAIR(30 + 1 + i) | A_BOLD);
 
         // Check if player is me and has item
-        if (!thread_arg->players[i].is_me || thread_arg->players[i].item == NONE)
-            continue;
+        if (!thread_arg->players[i].is_me || thread_arg->players[i].item == NONE) continue;
 
-        int color_index;
-        switch (thread_arg->players[i].item)
-        {
-        case BREAD:
-            color_index = 10;
-            break;
-        case HAMBURGER:
-            color_index = 11;
-            break;
-        case HAMBURGER_BURNED:
-            color_index = 12;
-            break;
-        case HAMBURGER_READY:
-            color_index = 13;
-            break;
-        case SALAD:
-            color_index = 14;
-            break;
-        case JUICE:
-            color_index = 15;
-            break;
-        case FRIES:
-            color_index = 16;
-            break;
-        case FRIES_BURNED:
-            color_index = 17;
-            break;
-        case FRIES_READY:
-            color_index = 18;
-            break;
-        case BURGER_BREAD:
-            color_index = 40;
-            break;
-        case SALAD_BREAD:
-            color_index = 41;
-            break;
-        case FULL_BURGER:
-            color_index = 42;
-            break;
-        case SALAD_BURGER:
-            color_index = 43;
-            break;
-        case NONE:
-            color_index = 0;
-            break;
-        }
+        int color_index = get_item_color(thread_arg->players[i].item);
 
         // Render item
         attron(COLOR_PAIR(color_index));
@@ -350,6 +164,57 @@ void render_players(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
     pthread_mutex_unlock(&thread_arg->players_mutex);
 }
 
+void render_appliances(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y){
+    pthread_mutex_lock(&thread_arg->appliances_mutex);
+    for (int i = 0; i < thread_arg->num_appliances; i++) {
+        // Render item or appliance (if empty)
+        enum Item_type item = thread_arg->appliances[i].content;
+        char char_to_render;
+        int pair_color;
+        if(thread_arg->appliances[i].state != EMPTY) {
+            char_to_render = get_item_char(item);
+            pair_color = get_item_color(item);
+        } else {
+            char_to_render = thread_arg->appliances[i].type == APP_OVEN ? 'O' : '0';
+            pair_color = MAP_COLOR_OVEN;
+        }
+
+        attron(COLOR_PAIR(pair_color));
+        mvaddch(start_y + thread_arg->appliances[i].y, start_x + thread_arg->appliances[i].x, char_to_render);
+        attroff(COLOR_PAIR(pair_color));
+
+        // Render timer
+        if (thread_arg->appliances[i].state == COOKING || thread_arg->appliances[i].state == READY) {
+            // Get clamped timer
+            int t = thread_arg->appliances[i].time_left;
+            if (t < 0) t = 0; else if (t > 9) t = 9;
+            char_to_render = '0' + t;
+
+            pair_color = thread_arg->appliances[i].state == READY ? NUMBER_COLOR_EMERGENCY : NUMBER_COLOR_WARNING;
+            attron(COLOR_PAIR(pair_color) | A_BOLD);
+            mvaddch(start_y + thread_arg->appliances[i].timer_y, start_x + thread_arg->appliances[i].timer_x, char_to_render);
+            attroff(COLOR_PAIR(pair_color) | A_BOLD);
+        }
+    }
+    pthread_mutex_unlock(&thread_arg->appliances_mutex);
+}
+
+void render_counters(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y){
+    pthread_mutex_lock(&thread_arg->counters_mutex);
+    for (int i = 0; i < thread_arg->num_counters; i++) {
+        // Se a bancada tiver item, renderiza o item
+        if (thread_arg->counters[i].content != NONE) {
+            char char_to_render = get_item_char(thread_arg->counters[i].content);
+            int pair_color = get_item_color(thread_arg->counters[i].content);
+
+            attron(COLOR_PAIR(pair_color) | A_UNDERLINE);
+            mvaddch(start_y + thread_arg->counters[i].y, start_x + thread_arg->counters[i].x, char_to_render);
+            attroff(COLOR_PAIR(pair_color) | A_UNDERLINE);
+        }
+    }
+    pthread_mutex_unlock(&thread_arg->counters_mutex);
+}
+    
 /*
     Function to render debug information
     Responsible for rendering each line of debug, and highliting current one
@@ -366,11 +231,9 @@ void render_debug(THREAD_ARG_STRUCT *thread_arg)
     for (int i = 0; i < 10; i++)
     {
         // Set color (to highlight current line), and render line
-        if ((thread_arg->current_debug_line + 10 - 1) % 10 == i)
-            attron(COLOR_PAIR(5));
+        if ((thread_arg->current_debug_line + 10 - 1) % 10 == i) attron(COLOR_PAIR(5));
         mvprintw(i, 0, "%.20s", thread_arg->debug[i]);
-        if ((thread_arg->current_debug_line + 10 - 1) % 10 == i)
-            attroff(COLOR_PAIR(5));
+        if ((thread_arg->current_debug_line + 10 - 1) % 10 == i) attroff(COLOR_PAIR(5));
     }
     pthread_mutex_unlock(&thread_arg->debug_mutex);
 }

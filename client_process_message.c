@@ -13,8 +13,7 @@
     Return:
         -
 */
-void process_message_item(char *message, THREAD_ARG_STRUCT *thread_arg)
-{
+void process_message_item(char *message, THREAD_ARG_STRUCT *thread_arg) {
     // Access player's CR
     pthread_mutex_lock(&thread_arg->players_mutex);
     // Get player index and item type
@@ -39,23 +38,20 @@ void process_message_item(char *message, THREAD_ARG_STRUCT *thread_arg)
     Return:
         -
 */
-void process_message_movement(char *message, THREAD_ARG_STRUCT *thread_arg)
-{
+void process_message_movement(char *message, THREAD_ARG_STRUCT *thread_arg) {
     // Access player's CR and update the given player's item
     pthread_mutex_lock(&thread_arg->players_mutex);
     // Get player index and position
     int index = msgS_movement_get_player_index(message), x = msgS_movement_get_x(message), y = msgS_movement_get_y(message);
     // Check if valid player and position is changed
-    if ((index >= 0 && index < MAX_PLAYERS) && (x != thread_arg->players[index].x || y != thread_arg->players[index].y))
-    {
+    if ((index >= 0 && index < MAX_PLAYERS) && (x != thread_arg->players[index].x || y != thread_arg->players[index].y)) {
         // Update last position and position
         thread_arg->players[index].last_x = thread_arg->players[index].x;
         thread_arg->players[index].last_y = thread_arg->players[index].y;
         thread_arg->players[index].x = x;
         thread_arg->players[index].y = y;
         // If last position is invalid, set to current position
-        if (thread_arg->players[index].last_x == -1 || thread_arg->players[index].last_y == -1)
-        {
+        if (thread_arg->players[index].last_x == -1 || thread_arg->players[index].last_y == -1) {
             thread_arg->players[index].last_x = x;
             thread_arg->players[index].last_y = y;
         }
@@ -72,8 +68,7 @@ void process_message_movement(char *message, THREAD_ARG_STRUCT *thread_arg)
     Return:
         -
 */
-void process_message_players(char *message, THREAD_ARG_STRUCT *thread_arg)
-{
+void process_message_players(char *message, THREAD_ARG_STRUCT *thread_arg) {
     // Access Debug CR
     pthread_mutex_lock(&thread_arg->debug_mutex);
     sprintf(thread_arg->debug[thread_arg->current_debug_line], "CON %d:%d.", msgS_players_get_player_index(message), msgS_players_get_status(message)); // Add debug message
@@ -87,10 +82,8 @@ void process_message_players(char *message, THREAD_ARG_STRUCT *thread_arg)
     int status = msgS_players_get_status(message);
     thread_arg->players[index].is_active = status; // Update status
     // Update player count
-    if (status == 1)
-        thread_arg->num_players++;
-    else
-        thread_arg->num_players--;
+    if (status == 1) thread_arg->num_players++;
+    else thread_arg->num_players--;
     pthread_mutex_unlock(&thread_arg->players_mutex);
 }
 
@@ -103,8 +96,7 @@ void process_message_players(char *message, THREAD_ARG_STRUCT *thread_arg)
     Return:
         -
 */
-void process_message_system(char *message, THREAD_ARG_STRUCT *thread_arg)
-{
+void process_message_system(char *message, THREAD_ARG_STRUCT *thread_arg) {
     // Access debug CR
     pthread_mutex_lock(&thread_arg->debug_mutex);
     sprintf(thread_arg->debug[thread_arg->current_debug_line], "INDEX %d", msgS_system_get_player_index(message)); // Add debug message
@@ -113,8 +105,7 @@ void process_message_system(char *message, THREAD_ARG_STRUCT *thread_arg)
 
     // Access player CR and for each player check if it's index corresponds to this client's index
     pthread_mutex_lock(&thread_arg->players_mutex);
-    for (int i = 0; i < MAX_PLAYERS; i++)
-    {
+    for (int i = 0; i < MAX_PLAYERS; i++) {
         thread_arg->players[i].is_me = (i == msgS_system_get_player_index(message));
     }
     pthread_mutex_unlock(&thread_arg->players_mutex);
@@ -127,50 +118,38 @@ void process_message_system(char *message, THREAD_ARG_STRUCT *thread_arg)
         - char *message: message received from server
         - THREAD_ARG_STRUCT *thread_arg: struct containing shared data
 */
-void process_message_appliance(char *message, THREAD_ARG_STRUCT *thread_arg)
-{
+void process_message_appliance(char *message, THREAD_ARG_STRUCT *thread_arg) {
 
-    // Recupera dados da mensagem usando as novas funções
+    // Get data
     int index = msgS_appliance_get_index(message);
     int status = msgS_appliance_get_status(message);
     int time_left = msgS_appliance_get_time_left(message);
     
-    pthread_mutex_lock(&thread_arg->players_mutex);
+    pthread_mutex_lock(&thread_arg->appliances_mutex);
 
-    if (index >= 0 && index < num_appliances)
-    {
-        appliances[index].state = status;
-        appliances[index].time_left = time_left;
-        
-        // Lógica para atualizar o Conteúdo visual baseado no Status e Tipo
-        if (status == COOK_OFF)
-        {
-            appliances[index].content = NONE;
-        }
-        else
-        {
-            if (appliances[index].type == APP_OVEN)
-            {
-                if (status == COOK_COOKING)
-                    appliances[index].content = HAMBURGER;
-                else if (status == COOK_READY)
-                    appliances[index].content = HAMBURGER_READY;
-                else if (status == COOK_BURNT)
-                    appliances[index].content = HAMBURGER_BURNED;
-            }
-            else if (appliances[index].type == APP_FRYER)
-            {
-                if (status == COOK_COOKING)
-                    appliances[index].content = FRIES;
-                else if (status == COOK_READY)
-                    appliances[index].content = FRIES_READY;
-                else if (status == COOK_BURNT)
-                    appliances[index].content = FRIES_BURNED;
-            }
+    if (index >= 0 && index < thread_arg->num_appliances) {
+        thread_arg->appliances[index].state = status;
+        thread_arg->appliances[index].time_left = time_left;
+
+        // Update appliance's content
+        int is_oven = thread_arg->appliances[index].type == APP_OVEN;
+        switch (status) {
+            case EMPTY:
+                thread_arg->appliances[index].content = NONE;
+                break;
+            case COOKING:
+                thread_arg->appliances[index].content = is_oven ? HAMBURGER : FRIES;
+                break;
+            case READY:
+                thread_arg->appliances[index].content = is_oven ? HAMBURGER_READY : FRIES_READY;
+                break;
+            case BURNED:
+                thread_arg->appliances[index].content = is_oven ? HAMBURGER_BURNED : FRIES_BURNED;
+                break;
         }
     }
 
-    pthread_mutex_unlock(&thread_arg->players_mutex);
+    pthread_mutex_unlock(&thread_arg->appliances_mutex);
 }
 
 /*
@@ -180,28 +159,17 @@ void process_message_appliance(char *message, THREAD_ARG_STRUCT *thread_arg)
         - char *message: message received from server
         - THREAD_ARG_STRUCT *thread_arg: struct containing shared data
 */
-void process_message_counter(char *message, THREAD_ARG_STRUCT *thread_arg)
-{
+void process_message_counter(char *message, THREAD_ARG_STRUCT *thread_arg) {
 
-    // Recupera dados da mensagem usando as novas funções
+    // Get data
     int index = msgS_counter_get_counter_index(message);
     int item = msgS_counter_get_item_type(message);
 
-    pthread_mutex_lock(&thread_arg->players_mutex);
+    pthread_mutex_lock(&thread_arg->counters_mutex);
 
-    if (index >= 0 && index < num_counters)
-    {
-
-        // Lógica para atualizar o Conteúdo visual baseado no Status e Tipo
-        if (item == NONE)
-        {
-            counters[index].content = NONE;
-        }
-        else
-        {
-            counters[index].content = item;
-        }
+    if (index >= 0 && index < thread_arg->num_counters) {
+        thread_arg->counters[index].content = item;
     }
 
-    pthread_mutex_unlock(&thread_arg->players_mutex);
+    pthread_mutex_unlock(&thread_arg->counters_mutex);
 }
