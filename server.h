@@ -28,6 +28,10 @@ typedef struct thread_arg_struct {
     int num_counters; // Number of counters
     pthread_mutex_t counters_mutex; // Mutex to access counters' shared data
 
+    CUSTOMER customers[MAX_CUSTOMERS]; // Array of customers
+    int num_customers; // Number of customers
+    pthread_mutex_t customers_mutex; // Mutex to access customers' shared data
+
     struct sockaddr_in address; // Socket incoming address
 } THREAD_ARG_STRUCT;
 

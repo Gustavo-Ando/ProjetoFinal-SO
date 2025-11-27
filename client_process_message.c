@@ -1,8 +1,12 @@
 #include <pthread.h>
 #include <stdio.h>
 
+#include <stdlib.h>
+
 #include "message.h"
 #include "client_process_message.h"
+
+#define CUSTOMER_SPAWN_X  20
 
 /*
     Function to process item message from server
@@ -172,4 +176,66 @@ void process_message_counter(char *message, THREAD_ARG_STRUCT *thread_arg) {
     }
 
     pthread_mutex_unlock(&thread_arg->counters_mutex);
+}
+
+/*
+
+    Function to process customer arrival message from server
+    Responsible for updating the customer data
+    Params:
+        - char *message: message received from server
+        - THREAD_ARG_STRUCT *thread_arg: struct containing shared data
+*/
+
+void process_message_customer(char *message, THREAD_ARG_STRUCT *thread_arg)
+{
+
+    int id = msgS_customer_arrival_get_client_index(message);
+    int order_size = msgS_customer_arrival_get_order_size(message);
+
+    unsigned char ux = (unsigned char) message[3 + order_size];
+    unsigned char uy = (unsigned char) message[4 + order_size];
+    unsigned char ustate = (unsigned char) message[5 + order_size];
+    unsigned char utime = (unsigned char) message[6 + order_size];
+
+    int x = (int) ux;
+    int y = (int) uy;
+    int state = (int) ustate;
+    int time_left = (int) utime;
+
+    int *order = msgS_customer_arrival_get_order(message); 
+
+    pthread_mutex_lock(&thread_arg->customers_mutex);
+
+    CUSTOMER *c = &thread_arg->customers[id];
+    c->id = id;
+
+    // sets the position
+    c->x = x;
+    c->y = y;
+
+    // copies the order
+    c->order_size = order_size;
+    for (int i = 0; i < order_size && i < MAX_ORDER; i++) {
+        c->order[i] = (enum Item_type) order[i];
+    }
+    // if order_size < MAX_ORDER, fill the rest with NONE
+    for (int i = order_size; i < MAX_ORDER; i++) {
+        c->order[i] = NONE;
+    }
+
+    // applies state and time left
+    c->active = state;
+    c->time_left = time_left;
+
+    // if the customer is not active, reset order
+    if (!c->active) {
+        c->order_size = 0;
+        for (int i = 0; i < MAX_ORDER; i++) 
+            c->order[i] = NONE;
+    }
+
+    pthread_mutex_unlock(&thread_arg->customers_mutex);
+
+    free(order);
 }

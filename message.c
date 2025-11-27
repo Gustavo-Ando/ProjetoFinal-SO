@@ -401,6 +401,50 @@ int *msgS_customer_arrival_get_order(char *message) {
 }
 
 /*
+    Function to create message containing the given customer's full status
+    message[0] is the message code, message[1] contains the customer index, message[2] contains the order size, message [3..3+order_size-1] contains the order,
+    message[3+order_size] contains the x coord., message[4+order_size] contains the y coord., message[5+order_size] contains the state, message[6+order_size] contains time left
+    Params:
+        - char *msg: buffer containing the message
+        - int customer_id: customer's index
+        - enum Item_type *order: array containing the itens ordered
+        - int order_size: number of itens in the order
+        - int x: customer's x coord.
+        - int y: customer's y coord.
+        - int state: customer's state
+        - int time_left: time left for the customer to leave
+    Return:
+        -
+*/
+
+void msgS_customer(
+    char *msg,
+    int customer_id,
+    enum Item_type *order,
+    int order_size,
+    int x,
+    int y,
+    int state,
+    int time_left
+) {
+    msg[0] = MSG_CUSTOMER;
+    msg[1] = (char) ('0' + customer_id);
+    msg[2] = (char) ('0' + order_size);
+
+    for (int i = 0; i < order_size && i < MAX_ORDER; i++) {
+        msg[3 + i] = (char) ((unsigned char) order[i]); // escreva o valor diretamente como byte
+    }
+
+    msg[3 + order_size] = (char) ((unsigned char) x);
+    msg[4 + order_size] = (char) ((unsigned char) y);
+    msg[5 + order_size] = (char) ((unsigned char) state);
+    msg[6 + order_size] = (char) ((unsigned char) time_left);
+    msg[7 + order_size] = '\0';
+}
+
+
+
+/*
     Function to get the given message's type
     message[0] is the message type
     Params:

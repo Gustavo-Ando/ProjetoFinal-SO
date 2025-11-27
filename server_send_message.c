@@ -62,6 +62,45 @@ void send_game_state(THREAD_ARG_STRUCT *thread_arg, int index) {
     }
     mutex_unlock_both(&thread_arg->counters_mutex, &thread_arg->clients_mutex);
 
+    // Send customer data
+    
+    // Send customer data
+    mutex_lock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
+
+    for (int i = 0; i < thread_arg->num_customers; i++) {
+
+        // Pula customers inativos
+        if (!thread_arg->customers[i].active)
+            continue;
+
+        CUSTOMER *c = &thread_arg->customers[i];
+
+        int customer_id = c->id;
+        enum Item_type *order = c->order;
+        int order_size = c->order_size;
+
+        int x = c->x;
+        int y = c->y;
+        int state = c->active;  
+        int time_left = c->time_left;
+
+        msgS_customer(
+            message,
+            customer_id,
+            order,
+            order_size,
+            x,
+            y,
+            state,
+            time_left
+        );
+
+        send_message(thread_arg->clients[index].socket, message);
+    }
+
+    mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
+
+
 }
 
 /*
@@ -186,3 +225,47 @@ void broadcast_counter_update(THREAD_ARG_STRUCT *thread_arg, int counter_index) 
 
     pthread_mutex_unlock(&thread_arg->clients_mutex);
 }
+
+/*
+    Function to broadcast a customer update to all clients
+    Params:
+        - THREAD_ARG_STRUCT *thread_arg: shared game state
+        - int customer_index: index of the updated customer
+    Return:
+        -
+*/
+void broadcast_customer_update(THREAD_ARG_STRUCT *thread_arg, int customer_index)
+{
+    char message[MESSAGE_SIZE];
+
+    // Lock customers
+    pthread_mutex_lock(&thread_arg->customers_mutex);
+
+    CUSTOMER *c = &thread_arg->customers[customer_index];
+
+    msgS_customer(
+        message,
+        c->id,
+        c->order,
+        c->order_size,
+        c->x,
+        c->y,
+        c->active,
+        c->time_left
+    );
+
+    pthread_mutex_unlock(&thread_arg->customers_mutex);
+
+    // Lock clients and broadcast to all connected players
+    pthread_mutex_lock(&thread_arg->clients_mutex);
+
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        if (thread_arg->clients[i].socket != 0) {
+            send_message(thread_arg->clients[i].socket, message);
+        }
+    }
+
+    pthread_mutex_unlock(&thread_arg->clients_mutex);
+}
+
+    

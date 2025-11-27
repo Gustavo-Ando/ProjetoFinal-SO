@@ -199,8 +199,101 @@ int counter_interaction(THREAD_ARG_STRUCT *thread_arg, int px, int py, int index
     mutex_unlock_both(&thread_arg->counters_mutex, &thread_arg->clients_mutex);
     return counter_updated_index;
 }
-// FIM DO [TODO]
 
+/*
+    Function to remove one instance of an item from a customer's order
+    Params:
+        - CUSTOMER *c: pointer to the customer
+        - enum Item_type item: item to remove
+    Return:
+        - int: 0 if successful, -1 if not found or error
+*/
+
+static int customer_remove_order_item(CUSTOMER *c, enum Item_type item) {
+    if (!c) return -1;
+    if (c->order_size <= 0) return -1;
+    // find first match
+    for (int i = 0; i < c->order_size; ++i) {
+        if (c->order[i] == item) {
+            // shift left
+            for (int j = i; j + 1 < c->order_size; ++j) {
+                c->order[j] = c->order[j+1];
+            }
+            // clear tail
+            c->order[c->order_size - 1] = NONE;
+            c->order_size--;
+            return 0;
+        }
+    }
+    return -1; // not found
+}
+
+
+/*
+    Function to do the customer interaction
+    Responsible for updating customers' and players' itens, combining itens and giving score
+    Params:
+        - THREAD_ARG_STRUCT *thread_arg: struct containing shared data
+        - int px: player's x coord
+        - int py: player's y coord
+        - int index: index of the client responsible for the action
+    Return:
+        - int score_gained: score gained from the interaction
+*/
+int customer_interaction(THREAD_ARG_STRUCT *thread_arg, int px, int py, int index) {
+
+    int score_gained = 0;
+    int customer_id = get_customer_id_at(px, py);
+
+    mutex_lock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
+    
+    // Defensive sanity: if mapping returned an id, ensure coordinates match expected adjacency
+    if (customer_id >= 0) {
+        CUSTOMER *ccheck = &thread_arg->customers[customer_id];
+        int dx = ccheck->x - px;
+        int dy = ccheck->y - py;
+        if (abs(dx) > 2 || abs(dy) > 2) {
+            mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
+            return 0;
+        }
+    }
+    enum Item_type player_item = thread_arg->clients[index].item;
+
+    // Validate customer and player item
+    if (customer_id < 0 || !thread_arg->customers[customer_id].active || player_item == NONE) {
+        mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
+        return 0;
+    }
+
+    CUSTOMER *c = &thread_arg->customers[customer_id];
+
+    // Try to remove one instance of player_item from the customer's order safely
+    if (customer_remove_order_item(c, player_item) == 0) {
+        // player lost the item
+        thread_arg->clients[index].item = NONE;
+
+        // If order now empty, finalize customer
+        if (c->order_size == 0) {
+            c->active = 0;
+            c->delivered = 1;
+            // ensure array cleared
+            for (int j = 0; j < MAX_ORDER; j++) c->order[j] = NONE;
+            // release locks and notify
+            mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
+            broadcast_customer_update(thread_arg, customer_id);
+            return score_gained;
+        } else {
+            // still items left
+            mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
+            broadcast_customer_update(thread_arg, customer_id);
+            return score_gained;
+        }
+    }
+
+    // Item not found in order
+    mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
+    return 0;
+}
 
 /*
     Function to treat input from a client
@@ -215,7 +308,7 @@ int counter_interaction(THREAD_ARG_STRUCT *thread_arg, int px, int py, int index
 static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int index) {
 
     int try_moved = 0, try_action = 0;
-    int app_updated_index = -1, counter_updated_index = -1;
+    int app_updated_index = -1, counter_updated_index = -1, customer_updated_index = -1;
 
     switch (input) {
         // Movement (W, A, S, D)
@@ -279,6 +372,8 @@ static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int in
                 app_updated_index = app_interaction(thread_arg, px, py, index);
             } else if(counter_interaction_map[py][px] != -1){ // Counter interaction
                 counter_updated_index = counter_interaction(thread_arg, px, py, index);
+            } else if(customer_interaction_map[py][px] != -1){ // Customer interaction
+                customer_updated_index = customer_interaction(thread_arg, px, py, index);
             }
             break;
     
@@ -293,6 +388,7 @@ static void treat_client_input(THREAD_ARG_STRUCT *thread_arg, char input, int in
     if (try_action) broadcast_player_item(thread_arg, index);
     if (app_updated_index != -1) broadcast_appliance_status(thread_arg, app_updated_index);
     if (counter_updated_index != -1) broadcast_counter_update(thread_arg, counter_updated_index);
+    if (customer_updated_index != -1) broadcast_customer_update(thread_arg, customer_updated_index);
 }
 
 /*
@@ -366,6 +462,10 @@ static void *read_client_socket(void *args) {
     return NULL;
 }
 
+
+#define CUSTOMER_SPAWN_INTERVAL 8   // seconds between customer spawns
+static int customer_spawn_timer = 0;
+
 /*
     Thread to handle game physics and timers (Ovens/Fryers)
 */
@@ -374,6 +474,70 @@ static void *game_loop_thread(void *arg) {
 
     while (1) {
         sleep(1); // Check every one second
+
+        // Customer spawning =============================
+        customer_spawn_timer++;
+
+        if (customer_spawn_timer >= CUSTOMER_SPAWN_INTERVAL) {
+            customer_spawn_timer = 0;
+
+            pthread_mutex_lock(&thread_arg->customers_mutex);
+
+            // Search for an inactive customer slot
+            int created = 0;
+            for (int i = 0; i < thread_arg->num_customers; i++) {
+                CUSTOMER *c = &thread_arg->customers[i];
+
+                if (!c->active) {
+                    // Activate customer
+                    c->active = 1;
+                    c->delivered = 0;
+
+                    // Random time left (between 20 and 40 seconds)
+                    c->time_left = 20 + rand() % 21;
+
+                    // Random order size (between 1 and MAX_ORDER)
+                    c->order_size = 1 + (rand() % MAX_ORDER);
+                    if (c->order_size < 1) c->order_size = 1;
+                    if (c->order_size > MAX_ORDER) c->order_size = MAX_ORDER;
+
+                    // Generate random order
+                    for (int j = 0; j < c->order_size; j++) {
+                        int r = rand() % 5;
+                        switch (r) {
+                            case 0: c->order[j] = BURGER_BREAD; break;
+                            case 1: c->order[j] = SALAD; break;
+                            case 2: c->order[j] = JUICE; break;
+                            case 3: c->order[j] = FULL_BURGER; break;
+                            case 4: c->order[j] = FRIES_READY; break;
+                        }
+                    }   
+
+                    // clear remaining order slots
+                    for (int j = c->order_size; j < MAX_ORDER; ++j) {
+                        c->order[j] = NONE;
+                    }
+
+
+                    c->id = i;
+
+                    pthread_mutex_unlock(&thread_arg->customers_mutex);
+
+                    // Send update to all clients
+                    broadcast_customer_update(thread_arg, i);
+
+                    printf("[Spawner] Cliente criado no slot %d com pedido de %d itens.\n", i, c->order_size);
+
+                    created = 1;
+                    break;
+                }
+            }
+
+            if (!created) {
+                pthread_mutex_unlock(&thread_arg->customers_mutex);
+            }
+        }
+        // =======================================
 
         pthread_mutex_lock(&thread_arg->appliances_mutex);
 
@@ -429,6 +593,8 @@ static void *game_loop_thread(void *arg) {
 }
 
 int main(int argc, char **argv) {
+    srand(time(NULL));
+
     THREAD_ARG_STRUCT *thread_arg = malloc(sizeof(THREAD_ARG_STRUCT));
     // Initialize clients
     thread_arg->connected = 0;
@@ -441,6 +607,9 @@ int main(int argc, char **argv) {
 
     // Initialize counters
     thread_arg->num_counters = init_counters(thread_arg->counters);
+
+    // Initialize customers
+    thread_arg->num_customers = init_customers(thread_arg->customers);
 
     // Initialize server socket
     int master_socket, opt = 1;

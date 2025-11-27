@@ -65,4 +65,17 @@ enum Item_type msgS_table_get_item_type(char *message);
 int msgS_customer_arrival_get_client_index(char *message);
 int msgS_customer_arrival_get_order_size(char *message);
 int *msgS_customer_arrival_get_order(char *message);
+
+void msgS_customer(
+    char *msg,
+    int customer_id,
+    enum Item_type *order,
+    int order_size,
+    int x,
+    int y,
+    int state,
+    int time_left
+);
+
+
 #endif

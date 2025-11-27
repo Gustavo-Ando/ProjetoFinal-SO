@@ -146,10 +146,16 @@ void render_players(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
         // Check if player is connected
         if (!thread_arg->players[i].is_active) continue;
 
-        // Render player
-        attron(COLOR_PAIR(30 + 1 + i) | A_BOLD);
-        mvaddch(start_y + thread_arg->players[i].y, start_x + thread_arg->players[i].x, map_players_char[i]);
-        attroff(COLOR_PAIR(30 + 1 + i) | A_BOLD);
+        // Render player (with bounds check)
+        int px = start_x + thread_arg->players[i].x;
+        int py = start_y + thread_arg->players[i].y;
+        if (px >= start_x && px < start_x + MAP_WIDTH && py >= start_y && py < start_y + MAP_HEIGHT) {
+            attron(COLOR_PAIR(30 + 1 + i));
+            attron(A_BOLD);
+            mvaddch(py, px, map_players_char[i]);
+            attroff(A_BOLD);
+            attroff(COLOR_PAIR(30 + 1 + i));
+        }
 
         // Check if player is me and has item
         if (!thread_arg->players[i].is_me || thread_arg->players[i].item == NONE) continue;
@@ -157,12 +163,30 @@ void render_players(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
         int color_index = get_item_color(thread_arg->players[i].item);
 
         // Render item
-        attron(COLOR_PAIR(color_index));
-        mvaddch(start_y + thread_arg->players[i].last_y, start_x + thread_arg->players[i].last_x, get_item_char(thread_arg->players[i].item));
-        attroff(COLOR_PAIR(color_index));
+        // ensure last coords are inside map
+        int itx = start_x + thread_arg->players[i].last_x;
+        int ity = start_y + thread_arg->players[i].last_y;
+
+        if (itx >= start_x && itx < start_x + MAP_WIDTH && ity >= start_y && ity < start_y + MAP_HEIGHT) {
+            char ch = (thread_arg->players[i].item != NONE) ? get_item_char(thread_arg->players[i].item) : ' ';
+            attron(COLOR_PAIR(color_index));
+            mvaddch(ity, itx, ch);
+            attroff(COLOR_PAIR(color_index));
+        }
+
     }
     pthread_mutex_unlock(&thread_arg->players_mutex);
 }
+
+/*
+    Function to render all appliances and their itens
+    Params:
+        - THREAD_ARG_STRUCT *thread_arg: struct contatining shared information
+        - int start_x: initial x to render map
+        - int start_y: initial y to render map
+    Return:
+        -
+*/
 
 void render_appliances(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y){
     pthread_mutex_lock(&thread_arg->appliances_mutex);
@@ -179,9 +203,14 @@ void render_appliances(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y){
             pair_color = MAP_COLOR_OVEN;
         }
 
-        attron(COLOR_PAIR(pair_color));
-        mvaddch(start_y + thread_arg->appliances[i].y, start_x + thread_arg->appliances[i].x, char_to_render);
-        attroff(COLOR_PAIR(pair_color));
+        // bounds check
+        int ax = start_x + thread_arg->appliances[i].x;
+        int ay = start_y + thread_arg->appliances[i].y;
+        if (ax >= start_x && ax < start_x + MAP_WIDTH && ay >= start_y && ay < start_y + MAP_HEIGHT) {
+            attron(COLOR_PAIR(pair_color));
+            mvaddch(ay, ax, char_to_render);
+            attroff(COLOR_PAIR(pair_color));
+        }
 
         // Render timer
         if (thread_arg->appliances[i].state == COOKING || thread_arg->appliances[i].state == READY) {
@@ -191,28 +220,127 @@ void render_appliances(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y){
             char_to_render = '0' + t;
 
             pair_color = thread_arg->appliances[i].state == READY ? NUMBER_COLOR_EMERGENCY : NUMBER_COLOR_WARNING;
-            attron(COLOR_PAIR(pair_color) | A_BOLD);
-            mvaddch(start_y + thread_arg->appliances[i].timer_y, start_x + thread_arg->appliances[i].timer_x, char_to_render);
-            attroff(COLOR_PAIR(pair_color) | A_BOLD);
+            // timer coords may be -1 if not found; check bounds
+            int tx = start_x + thread_arg->appliances[i].timer_x;
+            int ty = start_y + thread_arg->appliances[i].timer_y;
+            if (thread_arg->appliances[i].timer_x >= 0 && thread_arg->appliances[i].timer_y >= 0 &&
+                tx >= start_x && tx < start_x + MAP_WIDTH && ty >= start_y && ty < start_y + MAP_HEIGHT) {
+                attron(COLOR_PAIR(pair_color));
+                attron(A_BOLD);
+                mvaddch(ty, tx, char_to_render);
+                attroff(A_BOLD);
+                attroff(COLOR_PAIR(pair_color));
+            }
         }
     }
     pthread_mutex_unlock(&thread_arg->appliances_mutex);
 }
 
+/*
+    Function to render all counters and their itens
+    Params:
+        - THREAD_ARG_STRUCT *thread_arg: struct contatining shared information
+        - int start_x: initial x to render map
+        - int start_y: initial y to render map
+    Return:
+        -
+*/
+
 void render_counters(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y){
     pthread_mutex_lock(&thread_arg->counters_mutex);
     for (int i = 0; i < thread_arg->num_counters; i++) {
-        // Se a bancada tiver item, renderiza o item
+        // If counter has item, render it
         if (thread_arg->counters[i].content != NONE) {
             char char_to_render = get_item_char(thread_arg->counters[i].content);
             int pair_color = get_item_color(thread_arg->counters[i].content);
 
-            attron(COLOR_PAIR(pair_color) | A_UNDERLINE);
-            mvaddch(start_y + thread_arg->counters[i].y, start_x + thread_arg->counters[i].x, char_to_render);
-            attroff(COLOR_PAIR(pair_color) | A_UNDERLINE);
+            int cx = start_x + thread_arg->counters[i].x;
+            int cy = start_y + thread_arg->counters[i].y;
+            if (cx >= start_x && cx < start_x + MAP_WIDTH && cy >= start_y && cy < start_y + MAP_HEIGHT) {
+                attron(COLOR_PAIR(pair_color));
+                attron(A_UNDERLINE);
+                mvaddch(cy, cx, char_to_render);
+                attroff(A_UNDERLINE);
+                attroff(COLOR_PAIR(pair_color));
+            }
         }
     }
     pthread_mutex_unlock(&thread_arg->counters_mutex);
+}
+
+/*
+    Function to render all customers and their orders
+    Params:
+        - THREAD_ARG_STRUCT *thread_arg: struct contatining shared information
+        - int start_x: initial x to render map
+        - int start_y: initial y to render map
+    Return:
+        -
+*/
+
+void render_customers(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
+{
+    pthread_mutex_lock(&thread_arg->customers_mutex);
+
+    for (int i = 0; i < MAX_CUSTOMERS; i++)
+    {
+        CUSTOMER *c = &thread_arg->customers[i];
+
+        if (!c->active)
+            continue;  // client not active
+
+        // Defensive clamp of order_size
+        if (c->order_size < 0) c->order_size = 0;
+        if (c->order_size > MAX_ORDER) c->order_size = MAX_ORDER;
+
+        if (c->x < 0 || c->x >= MAP_WIDTH || c->y < 0 || c->y >= MAP_HEIGHT) {
+            printf("[render] cliente %d com coords invalidas x=%d y=%d (MAP %dx%d)\n", c->id, c->x, c->y, MAP_WIDTH, MAP_HEIGHT);
+            continue;
+        }
+        int real_x = start_x + c->x + 2;
+        int real_y = start_y + c->y;
+
+        // Client rendering
+        if (real_x >= start_x && real_x < start_x + MAP_WIDTH && real_y >= start_y && real_y < start_y + MAP_HEIGHT) {
+            attron(COLOR_PAIR(PLAYERS_COLOR_CUSTOMER));
+            attron(A_BOLD);
+            mvaddch(real_y, real_x, '%');
+            attroff(A_BOLD);
+            attroff(COLOR_PAIR(PLAYERS_COLOR_CUSTOMER));
+        }
+
+        //
+        // Render order
+        //
+        int px = real_x + 2;  // stars two spaces after client
+
+        int max_x = start_x + MAP_WIDTH - 1;
+
+        for (int j = 0; j < c->order_size; j++) {
+            if (px > max_x) break;
+            enum Item_type it = c->order[j];
+            if (it == NONE) { px++; continue; }
+            char item_char = get_item_char(it);
+            int item_color = get_item_color(it);
+            if (real_y >= start_y && real_y < start_y + MAP_HEIGHT && px >= start_x && px <= max_x) {
+                attron(COLOR_PAIR(item_color));
+                mvaddch(real_y, px, item_char);
+                attroff(COLOR_PAIR(item_color));
+            }
+            px++;
+        }
+
+        // render timer only if fits
+        if (px + 4 <= max_x && real_y >= start_y && real_y < start_y + MAP_HEIGHT) {
+            attron(COLOR_PAIR(NUMBER_COLOR_DEFAULT));
+            attron(A_BOLD);
+            mvprintw(real_y, px + 1, "(%02d)", c->time_left);
+            attroff(A_BOLD);
+            attroff(COLOR_PAIR(NUMBER_COLOR_DEFAULT));
+        }
+    }
+
+    pthread_mutex_unlock(&thread_arg->customers_mutex);
 }
     
 /*

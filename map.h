@@ -4,7 +4,7 @@
 #include "config.h"
 #include <time.h>
 
-#define MAP_WIDTH 19
+#define MAP_WIDTH 25
 #define MAP_HEIGHT 10
 
 #define MAP_COLOR_DEFAULT 0
@@ -41,6 +41,10 @@
 
 #define MAX_APPLIANCES 20
 
+#define MAX_COUNTERS 32
+#define MAX_CUSTOMERS 4
+#define MAX_ORDER 3
+
 // Enum of item types and their rendered characters
 enum Item_type {
     NONE,
@@ -56,10 +60,10 @@ enum Item_type {
     FRIES_READY,
     FRIES_BURNED,
 
-    BURGER_BREAD,
-    SALAD_BREAD,
-    SALAD_BURGER,
-    FULL_BURGER,
+    BURGER_BREAD = 11,
+    SALAD_BREAD = 12,
+    SALAD_BURGER = 13,
+    FULL_BURGER = 14,
 };
 
 enum Cook_status {
@@ -75,7 +79,7 @@ enum Appliance_type {
 };
 
 typedef struct {
-    int x, y; // Posição visual (onde muda o caracter)
+    int x, y; // Visual position (where changes character)
     int timer_x, timer_y;
     int time_left;
     enum Appliance_type type;
@@ -85,11 +89,21 @@ typedef struct {
 } APPLIANCE;
 
 typedef struct {
-    int x, y; // Posição visual (onde muda o caracter)
+    int x, y; // Visual position (where changes character)
     enum Item_type content;
 } COUNTER;
 
-#define MAX_COUNTERS 32
+typedef struct {
+    int id;
+    int x, y; // Visual position (of the customer)
+    int order_size;
+    enum Item_type order[MAX_ORDER]; // Items ordered
+
+    int delivered;
+    int active;
+    int time_left;
+
+} CUSTOMER;
 
 // CLIENT
 extern char map_players_char[MAX_PLAYERS];
@@ -122,6 +136,11 @@ extern int counter_interaction_map[MAP_HEIGHT][MAP_WIDTH];
 
 int init_counters(COUNTER counters[MAX_COUNTERS]);
 int get_counter_id_at(int x, int y);
+
+extern int customer_interaction_map[MAP_HEIGHT][MAP_WIDTH];
+
+int init_customers(CUSTOMER customers[MAX_CUSTOMERS]);
+int get_customer_id_at(int x, int y);
 
 enum Item_type try_combine(enum Item_type item1, enum Item_type item2);
 

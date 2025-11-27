@@ -55,6 +55,7 @@ static void *curses(void *arg) {
         render_counters(thread_arg, start_x, start_y);
         render_appliances(thread_arg, start_x, start_y);
         render_players(thread_arg, start_x, start_y);
+        render_customers(thread_arg, start_x, start_y);
         render_debug(thread_arg);
         refresh();
 
@@ -110,6 +111,9 @@ static void *socket_read_thread(void *arg) {
                     break;
                 case MSG_COUNTER:
                     process_message_counter(buffer + current_index, thread_arg);
+                    break;
+                case MSG_CUSTOMER:
+                    process_message_customer(buffer + current_index, thread_arg);
                     break;
                 // If there are no more messages, end the loop
                 default:
@@ -185,6 +189,7 @@ int main(int argc, char **argv) {
     THREAD_ARG_STRUCT *thread_arg = malloc(sizeof(THREAD_ARG_STRUCT));
     thread_arg->buffer_send_size = 0;
     thread_arg->num_players = 0;
+    thread_arg->num_customers = 0;
     thread_arg->current_debug_line = 0;
     thread_arg->client_fd = client_fd;
 
@@ -204,6 +209,9 @@ int main(int argc, char **argv) {
 
     // Inicialize counters
     thread_arg->num_counters = init_counters(thread_arg->counters);
+
+    // Inicialize customers
+    thread_arg->num_customers = init_customers(thread_arg->customers);
 
     // Initialize debug
     for (int i = 0; i < 10; i++) {
