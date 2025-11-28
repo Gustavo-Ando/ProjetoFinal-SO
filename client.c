@@ -82,46 +82,84 @@ static void *curses(void *arg) {
         -
 */
 static void *socket_read_thread(void *arg) {
-    THREAD_ARG_STRUCT *thread_arg = (THREAD_ARG_STRUCT *)arg; // Cast
-    char buffer[MESSAGE_SIZE] = {0};
-    // Receive a message from the server
+    THREAD_ARG_STRUCT *thread_arg = (THREAD_ARG_STRUCT *)arg; 
+    
+    // Enlarged buffer to handle fragmentation and multiple messages
+    char buffer[MESSAGE_SIZE * 4]; 
+    int stored_bytes = 0; // Bytes currently kept in buffer
+
     while (1) {
-        // Read the buffer
-        int read_length = read(thread_arg->client_fd, buffer, MESSAGE_SIZE);
-        buffer[read_length] = '\0'; // Terminate string
-        int current_index = 0;      // Current index to read from buffer
-        // While the current index is valid and the corresponding char is not null
-        while (current_index < MESSAGE_SIZE && current_index < read_length && buffer[current_index] != '\0') {
-            // Process message
-            switch (msg_get_type(buffer + current_index)) {
+        // Calculate available space in buffer
+        int bytes_to_read = (sizeof(buffer) - 1) - stored_bytes;
+        
+        // Safety reset if buffer is full
+        if (bytes_to_read <= 0) {
+            stored_bytes = 0;
+            bytes_to_read = sizeof(buffer) - 1;
+        }
+
+        // Append new data after the stored bytes
+        int read_length = read(thread_arg->client_fd, buffer + stored_bytes, bytes_to_read);
+        if (read_length <= 0) break; // Disconnected or error
+
+        stored_bytes += read_length;
+        buffer[stored_bytes] = '\0'; // Safety null terminator
+
+        int processed_bytes = 0;
+
+        // Process all complete messages in the buffer
+        while (processed_bytes < stored_bytes) {
+            char *current_msg = buffer + processed_bytes;
+            int remaining_bytes = stored_bytes - processed_bytes;
+
+            if (remaining_bytes < 1) break;
+
+            int msg_len = msg_get_size(current_msg);
+
+            // If message is incomplete, stop and wait for the rest
+            if (msg_len <= 0 || msg_len > remaining_bytes) {
+                break;
+            }
+
+            // Route message to correct handler
+            switch (msg_get_type(current_msg)) {
                 case MSG_MOVEMENT:
-                    process_message_movement(buffer + current_index, thread_arg);
+                    process_message_movement(current_msg, thread_arg);
                     break;
                 case MSG_PLAYERS:
-                    process_message_players(buffer + current_index, thread_arg);
+                    process_message_players(current_msg, thread_arg);
                     break;
                 case MSG_ITEM:
-                    process_message_item(buffer + current_index, thread_arg);
+                    process_message_item(current_msg, thread_arg);
                     break;
                 case MSG_SYSTEM:
-                    process_message_system(buffer + current_index, thread_arg);
+                    process_message_system(current_msg, thread_arg);
                     break;
                 case MSG_APPLIANCE:
-                    process_message_appliance(buffer + current_index, thread_arg);
+                    process_message_appliance(current_msg, thread_arg);
                     break;
                 case MSG_COUNTER:
-                    process_message_counter(buffer + current_index, thread_arg);
+                    process_message_counter(current_msg, thread_arg);
                     break;
                 case MSG_CUSTOMER:
-                    process_message_customer(buffer + current_index, thread_arg);
+                    process_message_customer(current_msg, thread_arg);
                     break;
-                // If there are no more messages, end the loop
                 default:
-                    buffer[current_index] = '\0';
                     break;
             }
-            // Update the current index given the message type (different sizes), to read concatenated messages
-            current_index += msg_get_size(buffer + current_index);
+            // Move to next message
+            processed_bytes += msg_len;
+        }
+
+        // Handle leftovers (fragmentation)
+        if (processed_bytes < stored_bytes) {
+            // Move partial message to the start of the buffer
+            int remaining = stored_bytes - processed_bytes;
+            memmove(buffer, buffer + processed_bytes, remaining);
+            stored_bytes = remaining;
+        } else {
+            // All data processed, clear buffer
+            stored_bytes = 0;
         }
     }
     return NULL;

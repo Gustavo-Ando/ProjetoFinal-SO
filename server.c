@@ -1,6 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <netinet/tcp.h>
 
 #include <pthread.h>
 
@@ -45,6 +49,11 @@ static void *read_master_socket(void *args)
         // Accepts the connection
         int new_socket = accept(master_socket, (struct sockaddr *)&thread_arg->address, (socklen_t *)&addr_len);
         if (new_socket < 0) fail("Accept failed");
+        int flag = 1;
+        int result = setsockopt(new_socket, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
+        if (result < 0) {
+            perror("Erro ao configurar TCP_NODELAY");
+        }
         printf("New connection!\n");
         printf(" - Socket FD: %d\n", new_socket);
         printf(" - IP: %s:%d\n", inet_ntoa(thread_arg->address.sin_addr), ntohs(thread_arg->address.sin_port));
@@ -465,6 +474,7 @@ static void *read_client_socket(void *args) {
 
 #define CUSTOMER_SPAWN_INTERVAL 8   // seconds between customer spawns
 static int customer_spawn_timer = 0;
+static int tick_counter = 0;
 
 /*
     Thread to handle game physics and timers (Ovens/Fryers)
@@ -473,7 +483,15 @@ static void *game_loop_thread(void *arg) {
     THREAD_ARG_STRUCT *thread_arg = (THREAD_ARG_STRUCT *)arg;
 
     while (1) {
-        sleep(1); // Check every one second
+        struct timespec ts;
+        ts.tv_sec = 0; 
+        ts.tv_nsec = 100000000L; //0.1s
+        nanosleep(&ts, NULL);
+
+        tick_counter++;
+        if (tick_counter < 10) 
+            continue;
+        tick_counter = 0;
 
         // Customer spawning =============================
         customer_spawn_timer++;

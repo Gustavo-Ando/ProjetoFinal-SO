@@ -475,7 +475,7 @@ int msg_get_size(char *message) {
         case MSG_APPLIANCE: return 4;
         case MSG_COUNTER: return 3;
         case MSG_TABLE: return 3;
-        case MSG_CUSTOMER: return 3 + msgS_customer_arrival_get_order_size(message);
+        case MSG_CUSTOMER: return 7 + msgS_customer_arrival_get_order_size(message);
         default: return 0;
     }
 }
