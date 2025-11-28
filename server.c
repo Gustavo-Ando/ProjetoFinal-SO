@@ -537,6 +537,37 @@ static void *game_loop_thread(void *arg) {
                 pthread_mutex_unlock(&thread_arg->customers_mutex);
             }
         }
+
+        int customers_to_update[MAX_CUSTOMERS];
+        int update_count = 0;
+
+        // Customer timer logic
+        pthread_mutex_lock(&thread_arg->customers_mutex);
+        for (int i = 0; i < thread_arg->num_customers; i++) {
+            CUSTOMER *c = &thread_arg->customers[i];
+            
+            if (c->active) {
+                c->time_left--;
+                
+                if (c->time_left <= 0) {
+                    c->time_left = 0;
+                    c->active = 0;
+                    
+                    c->order_size = 0;
+                    for(int k=0; k<MAX_ORDER; k++) c->order[k] = NONE;
+
+                    printf("[Timer] Cliente %d saiu por tempo esgotado.\n", i);
+                }
+                
+                customers_to_update[update_count++] = i;
+            }
+        }
+        pthread_mutex_unlock(&thread_arg->customers_mutex);
+
+        for (int k = 0; k < update_count; k++) {
+            broadcast_customer_update(thread_arg, customers_to_update[k]);
+        }
+        
         // =======================================
 
         pthread_mutex_lock(&thread_arg->appliances_mutex);

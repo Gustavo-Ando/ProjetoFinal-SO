@@ -330,13 +330,23 @@ void render_customers(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
             px++;
         }
 
-        // render timer only if fits
-        if (px + 4 <= max_x && real_y >= start_y && real_y < start_y + MAP_HEIGHT) {
-            attron(COLOR_PAIR(NUMBER_COLOR_DEFAULT));
+        // render timer
+        if (real_y >= start_y && real_y < start_y + MAP_HEIGHT) {
+            int timer_color_pair = NUMBER_COLOR_DEFAULT;
+            
+            if (c->time_left <= 10) {
+                timer_color_pair = NUMBER_COLOR_EMERGENCY;
+            } else if (c->time_left <= 20) {
+                timer_color_pair = NUMBER_COLOR_WARNING; 
+            } else {
+                timer_color_pair = NUMBER_COLOR_DEFAULT; 
+            }
+
+            attron(COLOR_PAIR(timer_color_pair));
             attron(A_BOLD);
             mvprintw(real_y, px + 1, "(%02d)", c->time_left);
             attroff(A_BOLD);
-            attroff(COLOR_PAIR(NUMBER_COLOR_DEFAULT));
+            attroff(COLOR_PAIR(timer_color_pair));
         }
     }
 
