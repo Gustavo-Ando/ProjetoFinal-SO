@@ -98,6 +98,15 @@ void send_game_state(THREAD_ARG_STRUCT *thread_arg, int index) {
         send_message(thread_arg->clients[index].socket, message);
     }
 
+    //Send score data
+    pthread_mutex_lock(&thread_arg->score_mutex);
+    int s = thread_arg->score;
+    pthread_mutex_unlock(&thread_arg->score_mutex);
+    
+    char msg_score[MESSAGE_SIZE];
+    msgS_score(msg_score, s);
+    send_message(thread_arg->clients[index].socket, msg_score);
+
     mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
 
 
@@ -268,4 +277,22 @@ void broadcast_customer_update(THREAD_ARG_STRUCT *thread_arg, int customer_index
     pthread_mutex_unlock(&thread_arg->clients_mutex);
 }
 
+
+void broadcast_score(THREAD_ARG_STRUCT *thread_arg) {
+    char message[MESSAGE_SIZE];
+    
+    pthread_mutex_lock(&thread_arg->score_mutex);
+    int current_score = thread_arg->score;
+    pthread_mutex_unlock(&thread_arg->score_mutex);
+
+    msgS_score(message, current_score);
+
+    pthread_mutex_lock(&thread_arg->clients_mutex);
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        if (thread_arg->clients[i].socket != 0) {
+            send_message(thread_arg->clients[i].socket, message);
+        }
+    }
+    pthread_mutex_unlock(&thread_arg->clients_mutex);
+}
     

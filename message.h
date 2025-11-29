@@ -19,6 +19,7 @@ enum Message_type {
     MSG_COUNTER = 'K',   // COUNTER with or without item
     MSG_TABLE = 'T',     // Item left, taken from the table
     MSG_CUSTOMER = 'C',  // Customer arrive, receive order, or leaves
+    MSG_SCORE = 's'      // Total score
 };
 
 void msgC_input(char *message, char input);
@@ -76,6 +77,9 @@ void msgS_customer(
     int state,
     int time_left
 );
+
+void msgS_score(char *message, int score);
+int msgS_score_get_value(char *message);
 
 
 #endif

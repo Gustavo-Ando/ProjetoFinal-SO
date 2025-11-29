@@ -254,21 +254,29 @@ int customer_interaction(THREAD_ARG_STRUCT *thread_arg, int px, int py, int inde
     int score_gained = 0;
     int customer_id = get_customer_id_at(px, py);
 
+    // Flags to defer broadcasting until after unlocking
+    int should_broadcast_customer = 0;
+    int should_broadcast_score = 0;
+    int target_customer_id = -1;
+
+    // Lock shared resources
     mutex_lock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
     
-    // Defensive sanity: if mapping returned an id, ensure coordinates match expected adjacency
+    // Safety check: Validate distance
     if (customer_id >= 0) {
         CUSTOMER *ccheck = &thread_arg->customers[customer_id];
         int dx = ccheck->x - px;
         int dy = ccheck->y - py;
         if (abs(dx) > 2 || abs(dy) > 2) {
+            // If too far, unlock and return
             mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
             return 0;
         }
     }
+
     enum Item_type player_item = thread_arg->clients[index].item;
 
-    // Validate customer and player item
+    // Validate customer state and player item
     if (customer_id < 0 || !thread_arg->customers[customer_id].active || player_item == NONE) {
         mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
         return 0;
@@ -276,32 +284,44 @@ int customer_interaction(THREAD_ARG_STRUCT *thread_arg, int px, int py, int inde
 
     CUSTOMER *c = &thread_arg->customers[customer_id];
 
-    // Try to remove one instance of player_item from the customer's order safely
+    // Attempt to deliver the item
     if (customer_remove_order_item(c, player_item) == 0) {
-        // player lost the item
+        // Remove item from player
         thread_arg->clients[index].item = NONE;
 
-        // If order now empty, finalize customer
+        // Score update
+        pthread_mutex_lock(&thread_arg->score_mutex);
+        thread_arg->score += 1;
+        pthread_mutex_unlock(&thread_arg->score_mutex);
+        
+        // Set broadcast flags
+        should_broadcast_score = 1;
+        target_customer_id = customer_id;
+        should_broadcast_customer = 1;
+
+        // Check if the order is complete
         if (c->order_size == 0) {
             c->active = 0;
             c->delivered = 1;
-            // ensure array cleared
+            // Clear order array safely
             for (int j = 0; j < MAX_ORDER; j++) c->order[j] = NONE;
-            // release locks and notify
-            mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
-            broadcast_customer_update(thread_arg, customer_id);
-            return score_gained;
-        } else {
-            // still items left
-            mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
-            broadcast_customer_update(thread_arg, customer_id);
-            return score_gained;
         }
     }
 
-    // Item not found in order
+    // Unlock mutexes
     mutex_unlock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
-    return 0;
+
+    // Broadcast updates
+    if (should_broadcast_customer) {
+        broadcast_customer_update(thread_arg, target_customer_id);
+        broadcast_player_item(thread_arg, index); // Update player's empty hand
+    }
+    
+    if (should_broadcast_score) {
+        broadcast_score(thread_arg);
+    }
+
+    return score_gained;
 }
 
 /*
@@ -493,7 +513,7 @@ static void *game_loop_thread(void *arg) {
             continue;
         tick_counter = 0;
 
-        // Customer spawning =============================
+        // Customer spawning
         customer_spawn_timer++;
 
         if (customer_spawn_timer >= CUSTOMER_SPAWN_INTERVAL) {
@@ -544,8 +564,6 @@ static void *game_loop_thread(void *arg) {
                     // Send update to all clients
                     broadcast_customer_update(thread_arg, i);
 
-                    printf("[Spawner] Cliente criado no slot %d com pedido de %d itens.\n", i, c->order_size);
-
                     created = 1;
                     break;
                 }
@@ -558,6 +576,7 @@ static void *game_loop_thread(void *arg) {
 
         int customers_to_update[MAX_CUSTOMERS];
         int update_count = 0;
+        int score_changed = 0;
 
         // Customer timer logic
         pthread_mutex_lock(&thread_arg->customers_mutex);
@@ -570,11 +589,15 @@ static void *game_loop_thread(void *arg) {
                 if (c->time_left <= 0) {
                     c->time_left = 0;
                     c->active = 0;
-                    
-                    c->order_size = 0;
-                    for(int k=0; k<MAX_ORDER; k++) c->order[k] = NONE;
 
-                    printf("[Timer] Cliente %d saiu por tempo esgotado.\n", i);
+                    //Minus 1 score
+                    pthread_mutex_lock(&thread_arg->score_mutex);
+                    thread_arg->score -= 1; 
+                    pthread_mutex_unlock(&thread_arg->score_mutex);
+
+                    score_changed = 1;
+                    
+                    customers_to_update[update_count++] = i;
                 }
                 
                 customers_to_update[update_count++] = i;
@@ -585,8 +608,12 @@ static void *game_loop_thread(void *arg) {
         for (int k = 0; k < update_count; k++) {
             broadcast_customer_update(thread_arg, customers_to_update[k]);
         }
+
+        if (score_changed) {
+            broadcast_score(thread_arg);
+        }
         
-        // =======================================
+        // Appliances logic
 
         pthread_mutex_lock(&thread_arg->appliances_mutex);
 
@@ -645,6 +672,15 @@ int main(int argc, char **argv) {
     srand(time(NULL));
 
     THREAD_ARG_STRUCT *thread_arg = malloc(sizeof(THREAD_ARG_STRUCT));
+
+    //Inicialize mutex
+    pthread_mutex_init(&thread_arg->clients_mutex, NULL);
+    pthread_mutex_init(&thread_arg->appliances_mutex, NULL);
+    pthread_mutex_init(&thread_arg->counters_mutex, NULL);
+    pthread_mutex_init(&thread_arg->customers_mutex, NULL);
+    pthread_mutex_init(&thread_arg->score_mutex, NULL);
+
+
     // Initialize clients
     thread_arg->connected = 0;
     for (int i = 0; i < MAX_PLAYERS; i++) {
@@ -659,6 +695,9 @@ int main(int argc, char **argv) {
 
     // Initialize customers
     thread_arg->num_customers = init_customers(thread_arg->customers);
+
+    //Inicialize score
+    thread_arg->score = 0;
 
     // Initialize server socket
     int master_socket, opt = 1;

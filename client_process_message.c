@@ -193,15 +193,10 @@ void process_message_customer(char *message, THREAD_ARG_STRUCT *thread_arg)
     int id = msgS_customer_arrival_get_client_index(message);
     int order_size = msgS_customer_arrival_get_order_size(message);
 
-    unsigned char ux = (unsigned char) message[3 + order_size];
-    unsigned char uy = (unsigned char) message[4 + order_size];
-    unsigned char ustate = (unsigned char) message[5 + order_size];
-    unsigned char utime = (unsigned char) message[6 + order_size];
-
-    int x = (int) ux;
-    int y = (int) uy;
-    int state = (int) ustate;
-    int time_left = (int) utime;
+    int x = message[3 + order_size] - '0';
+    int y = message[4 + order_size] - '0';
+    int state = message[5 + order_size] - '0';
+    int time_left = message[6 + order_size] - '0';
 
     int *order = msgS_customer_arrival_get_order(message); 
 
@@ -238,4 +233,25 @@ void process_message_customer(char *message, THREAD_ARG_STRUCT *thread_arg)
     pthread_mutex_unlock(&thread_arg->customers_mutex);
 
     free(order);
+}
+
+/*
+    Function to process score arrival message from server
+    Responsible for updating the score data
+    Params:
+        - char *message: message received from server
+        - THREAD_ARG_STRUCT *thread_arg: struct containing shared data
+*/
+void process_message_score(char *message, THREAD_ARG_STRUCT *thread_arg) {
+    int new_score = msgS_score_get_value(message);
+
+    pthread_mutex_lock(&thread_arg->score_mutex);
+    thread_arg->score = new_score;
+    pthread_mutex_unlock(&thread_arg->score_mutex);
+
+    // Debug
+    pthread_mutex_lock(&thread_arg->debug_mutex);
+    sprintf(thread_arg->debug[thread_arg->current_debug_line], "SCORE: %d", new_score);
+    thread_arg->current_debug_line = (thread_arg->current_debug_line + 1) % 10;
+    pthread_mutex_unlock(&thread_arg->debug_mutex);
 }

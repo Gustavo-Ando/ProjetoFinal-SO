@@ -10,5 +10,6 @@ void process_message_system(char *message, THREAD_ARG_STRUCT *thread_arg);
 void process_message_appliance(char *message, THREAD_ARG_STRUCT *thread_arg);
 void process_message_counter(char *message, THREAD_ARG_STRUCT *thread_arg);
 void process_message_customer(char *message, THREAD_ARG_STRUCT *thread_arg);
+void process_message_score(char *message, THREAD_ARG_STRUCT *thread_arg);
 
 #endif

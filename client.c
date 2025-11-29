@@ -56,6 +56,7 @@ static void *curses(void *arg) {
         render_appliances(thread_arg, start_x, start_y);
         render_players(thread_arg, start_x, start_y);
         render_customers(thread_arg, start_x, start_y);
+        render_score(thread_arg, start_x, start_y);
         render_debug(thread_arg);
         refresh();
 
@@ -110,14 +111,23 @@ static void *socket_read_thread(void *arg) {
         // Process all complete messages in the buffer
         while (processed_bytes < stored_bytes) {
             char *current_msg = buffer + processed_bytes;
+            if (*current_msg == '\0' || *current_msg == '\n' || *current_msg == '\r') {
+                processed_bytes++;
+                continue;
+            }
             int remaining_bytes = stored_bytes - processed_bytes;
 
             if (remaining_bytes < 1) break;
 
             int msg_len = msg_get_size(current_msg);
 
+            if (msg_len <= 0) {
+                // Plus one byte and try to find the next
+                processed_bytes++;
+                continue;
+            }
             // If message is incomplete, stop and wait for the rest
-            if (msg_len <= 0 || msg_len > remaining_bytes) {
+            if (msg_len > remaining_bytes) {
                 break;
             }
 
@@ -143,6 +153,9 @@ static void *socket_read_thread(void *arg) {
                     break;
                 case MSG_CUSTOMER:
                     process_message_customer(current_msg, thread_arg);
+                    break;
+                case MSG_SCORE:
+                    process_message_score(current_msg, thread_arg);
                     break;
                 default:
                     break;
@@ -230,6 +243,16 @@ int main(int argc, char **argv) {
     thread_arg->num_customers = 0;
     thread_arg->current_debug_line = 0;
     thread_arg->client_fd = client_fd;
+    thread_arg->score = 0;
+
+    //inicialize all mutex
+    pthread_mutex_init(&thread_arg->buffer_send_mutex, NULL);
+    pthread_mutex_init(&thread_arg->players_mutex, NULL);
+    pthread_mutex_init(&thread_arg->debug_mutex, NULL);
+    pthread_mutex_init(&thread_arg->appliances_mutex, NULL);
+    pthread_mutex_init(&thread_arg->counters_mutex, NULL);
+    pthread_mutex_init(&thread_arg->customers_mutex, NULL);
+    pthread_mutex_init(&thread_arg->score_mutex, NULL);
 
     // Initialize all players
     for (int i = 0; i < MAX_PLAYERS; i++) {
@@ -250,6 +273,10 @@ int main(int argc, char **argv) {
 
     // Inicialize customers
     thread_arg->num_customers = init_customers(thread_arg->customers);
+
+    //Inicialize score
+    thread_arg->score = 0;
+    pthread_mutex_init(&thread_arg->score_mutex, NULL);
 
     // Initialize debug
     for (int i = 0; i < 10; i++) {

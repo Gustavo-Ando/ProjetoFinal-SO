@@ -32,6 +32,9 @@ typedef struct thread_arg_struct {
     int num_customers; // Number of customers
     pthread_mutex_t customers_mutex; // Mutex to access customers' shared data
 
+    int score; // Total score
+    pthread_mutex_t score_mutex; // Mutex to acess score
+
     struct sockaddr_in address; // Socket incoming address
 } THREAD_ARG_STRUCT;
 

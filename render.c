@@ -352,6 +352,19 @@ void render_customers(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y)
 
     pthread_mutex_unlock(&thread_arg->customers_mutex);
 }
+
+void render_score(THREAD_ARG_STRUCT *thread_arg, int start_x, int start_y) {
+    pthread_mutex_lock(&thread_arg->score_mutex);
+    int s = thread_arg->score;
+    pthread_mutex_unlock(&thread_arg->score_mutex);
+
+    int pos_y = start_y + MAP_HEIGHT + 1; 
+    int pos_x = start_x + (MAP_WIDTH / 2) - 4; 
+
+    attron(A_BOLD);
+    mvprintw(pos_y, pos_x, "SCORE: %d", s);
+    attroff(A_BOLD);
+}
     
 /*
     Function to render debug information

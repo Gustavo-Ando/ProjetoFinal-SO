@@ -1,4 +1,6 @@
 #include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 #include "message.h"
 
 // CLIENT MESSAGES
@@ -435,10 +437,10 @@ void msgS_customer(
         msg[3 + i] = (char) ((unsigned char) order[i]); // escreva o valor diretamente como byte
     }
 
-    msg[3 + order_size] = (char) ((unsigned char) x);
-    msg[4 + order_size] = (char) ((unsigned char) y);
-    msg[5 + order_size] = (char) ((unsigned char) state);
-    msg[6 + order_size] = (char) ((unsigned char) time_left);
+    msg[3 + order_size] = (char) ('0' + x);
+    msg[4 + order_size] = (char) ('0' + y);
+    msg[5 + order_size] = (char) ('0' + state);
+    msg[6 + order_size] = (char) ('0' + time_left);
     msg[7 + order_size] = '\0';
 }
 
@@ -476,6 +478,18 @@ int msg_get_size(char *message) {
         case MSG_COUNTER: return 3;
         case MSG_TABLE: return 3;
         case MSG_CUSTOMER: return 7 + msgS_customer_arrival_get_order_size(message);
+        case MSG_SCORE: return 10; 
         default: return 0;
     }
+}
+
+
+void msgS_score(char *message, int score) {
+    sprintf(message, "%c%09d", MSG_SCORE, score);
+}
+
+int msgS_score_get_value(char *message) {
+    int value;
+    sscanf(message + 1, "%d", &value);
+    return value;
 }
