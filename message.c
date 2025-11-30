@@ -1,6 +1,4 @@
 #include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
 #include "message.h"
 
 // CLIENT MESSAGES
@@ -32,6 +30,8 @@ char msgC_input_get_input(char *message) {
     return message[1];
 }
 
+// SERVER MESSAGES
+
 /*
     Function to create message containing the client's connection status
     message[0] is the message code, message[1] contains the status
@@ -41,7 +41,7 @@ char msgC_input_get_input(char *message) {
     Return:
         -
 */
-void msgC_connection(char *message, int status) {
+void msgS_connection(char *message, int status) {
     message[0] = MSG_CONNECTION;
     message[1] = '0' + status;
     message[2] = '\0';
@@ -55,11 +55,9 @@ void msgC_connection(char *message, int status) {
     Return:
         - int status
 */
-int msgC_connection_get_status(char *message) {
+int msgS_connection_get_status(char *message) {
     return message[1] - '0';
 }
-
-// SERVER MESSAGES
 
 /*
     Function to create message containing the given player status
@@ -227,7 +225,14 @@ enum Item_type msgS_item_get_item_type(char *message) {
 
 /*
     Function to create message containing the given appliance's status
-    message[0] is the message code, message[1] contains the appliance index, message[2] contains the status
+    message[0] is the message code, message[1] contains the appliance index, message[2] contains the status, message[3] contains the time left
+    Params:
+        - char *message: buffer containing the message
+        - int app_index: app's index
+        - int status: app's status
+        - int time_left: app's time_left to finish
+    Return:
+        -
 */
 void msgS_appliance(char *message, int app_index, int status, int time_left) {
     message[0] = MSG_APPLIANCE;
@@ -239,6 +244,11 @@ void msgS_appliance(char *message, int app_index, int status, int time_left) {
 
 /*
     Function to get the appliance's index from an appliance-type message
+    message[1] contains the app's index
+    Params:
+        - char *message: buffer containing the message
+    Return:
+        - int app index
 */
 int msgS_appliance_get_index(char *message) {
     return message[1] - '0';
@@ -246,9 +256,26 @@ int msgS_appliance_get_index(char *message) {
 
 /*
     Function to get the appliance's status from an appliance-type message
+    message[2] contains the app's status.
+    Params:
+        - char *message: buffer containing the message
+    Return:
+        - int app status
 */
 int msgS_appliance_get_status(char *message) {
     return message[2];
+}
+
+/*
+    Function to get the appliance's time from an appliance-type message
+    message[3] contains the app's time left.
+    Params:
+        - char *message: buffer containing the message
+    Return:
+        - int time left
+*/
+int msgS_appliance_get_time_left(char *message) {
+    return message[3] - '0';
 }
 
 /*
@@ -292,12 +319,6 @@ enum Item_type msgS_counter_get_item_type(char *message) {
     return message[2] - '0';
 }
 
-/*
-    Function to get the appliance's time from an appliance-type message
-*/
-int msgS_appliance_get_time_left(char *message) {
-    return message[3] - '0';
-}
 
 /*
     Function to create message containing the given table's item
@@ -342,23 +363,31 @@ enum Item_type msgS_table_get_item_type(char *message) {
 
 /*
     Function to create message containing the given customer's order
-    message[0] is the message code, message[1] contains the customer index, message[2] contains the order size, message [3+order size] contains the order
+    message[0] is the message code, message[1] contains the customer index, message[2] contains the order size
+	message[3] contains the state, message[4] contains time left
+	message[5] to message[5+order_size-1] contains the order,
     Params:
-        - char *message: buffer containing the message
-        - int client_index: customer's index
+        - char *msg: buffer containing the message
+        - int customer_id: customer's index
         - enum Item_type *order: array containing the itens ordered
         - int order_size: number of itens in the order
+        - int state: customer's state
+        - int time_left: time left for the customer to leave
     Return:
         -
 */
-void msgS_customer_arrival(char *message, int client_index, enum Item_type *order, int order_size) {
-    message[0] = MSG_CUSTOMER;
-    message[1] = '0' + client_index;
-    message[2] = '0' + order_size;
-    for (int i = 0; i < order_size; i++) {
-        message[i + 3] = order[i];
+void msgS_customer(char *msg, int customer_id, enum Item_type *order, int order_size, int state, int time_left) {
+    msg[0] = MSG_CUSTOMER;
+    msg[1] = (char) ('0' + customer_id);
+    msg[2] = (char) ('0' + order_size);
+    msg[3] = (char) ('0' + state);
+    msg[4] = (char) ('0' + time_left);
+
+    for (int i = 0; i < order_size && i < MAX_ORDER; i++) {
+        msg[5 + i] = (char) ((unsigned char) order[i]); // Write item in order
     }
-    message[order_size + 3] = '\0';
+
+    msg[5 + order_size] = '\0';
 }
 
 /*
@@ -369,7 +398,7 @@ void msgS_customer_arrival(char *message, int client_index, enum Item_type *orde
     Return:
         - int customer index
 */
-int msgS_customer_arrival_get_client_index(char *message) {
+int msgS_customer_get_client_index(char *message) {
     return message[1] - '0';
 }
 
@@ -381,69 +410,51 @@ int msgS_customer_arrival_get_client_index(char *message) {
     Return:
         - int order size
 */
-int msgS_customer_arrival_get_order_size(char *message) {
+int msgS_customer_get_order_size(char *message) {
     return message[2] - '0';
 }
 
 /*
+    Function to get the customer's state from a customer-type message
+    message[3] contains the customer's state
+    Params:
+        - char *message: buffer containing the message
+    Return:
+        - int order size
+*/
+int msgS_customer_get_state(char *message) {
+    return message[3] - '0';
+}
+
+/*
+    Function to get the time left for customer from a customer-type message
+    message[4] contains the customer's time left
+    Params:
+        - char *message: buffer containing the message
+    Return:
+        - int order size
+*/
+int msgS_customer_get_time_left(char *message) {
+    return message[4] - '0';
+}
+
+
+/*
     Function to get the customer's order from a customer-type message
-    message[3+order_size] contains the customer's order
+    message[5] to message[5 + order_size - 1] contains the customer's order
     Params:
         - char *message: buffer containing the message
     Return:
         - int *order
 */
-int *msgS_customer_arrival_get_order(char *message) {
-    int order_size = msgS_customer_arrival_get_order_size(message);
+int *msgS_customer_get_order(char *message) {
+    int order_size = msgS_customer_get_order_size(message);
     int *order = (int *)malloc(sizeof(enum Item_type) * order_size);
     for (int i = 0; i < order_size; i++) {
-        order[i] = message[i + 3];
+        order[i] = message[i + 5];
     }
     return order;
 }
-
-/*
-    Function to create message containing the given customer's full status
-    message[0] is the message code, message[1] contains the customer index, message[2] contains the order size, message [3..3+order_size-1] contains the order,
-    message[3+order_size] contains the x coord., message[4+order_size] contains the y coord., message[5+order_size] contains the state, message[6+order_size] contains time left
-    Params:
-        - char *msg: buffer containing the message
-        - int customer_id: customer's index
-        - enum Item_type *order: array containing the itens ordered
-        - int order_size: number of itens in the order
-        - int x: customer's x coord.
-        - int y: customer's y coord.
-        - int state: customer's state
-        - int time_left: time left for the customer to leave
-    Return:
-        -
-*/
-
-void msgS_customer(
-    char *msg,
-    int customer_id,
-    enum Item_type *order,
-    int order_size,
-    int x,
-    int y,
-    int state,
-    int time_left
-) {
-    msg[0] = MSG_CUSTOMER;
-    msg[1] = (char) ('0' + customer_id);
-    msg[2] = (char) ('0' + order_size);
-
-    for (int i = 0; i < order_size && i < MAX_ORDER; i++) {
-        msg[3 + i] = (char) ((unsigned char) order[i]); // escreva o valor diretamente como byte
-    }
-
-    msg[3 + order_size] = (char) ('0' + x);
-    msg[4 + order_size] = (char) ('0' + y);
-    msg[5 + order_size] = (char) ('0' + state);
-    msg[6 + order_size] = (char) ('0' + time_left);
-    msg[7 + order_size] = '\0';
-}
-
 
 
 /*
@@ -477,19 +488,44 @@ int msg_get_size(char *message) {
         case MSG_APPLIANCE: return 4;
         case MSG_COUNTER: return 3;
         case MSG_TABLE: return 3;
-        case MSG_CUSTOMER: return 7 + msgS_customer_arrival_get_order_size(message);
-        case MSG_SCORE: return 10; 
+        case MSG_CUSTOMER: return 5 + msgS_customer_get_order_size(message);
+        case MSG_SCORE: return 3; 
         default: return 0;
     }
 }
 
 
+/*
+    Function to create message containing the current score
+    message[0] is the message type, message[1] and message[2] contains each 7 bits of the score and a 1 for padding
+    Params:
+        - char *msg: buffer containing the message
+        - int score: current game score
+    Return:
+        -
+*/
 void msgS_score(char *message, int score) {
-    sprintf(message, "%c%09d", MSG_SCORE, score);
+    message[0] = MSG_SCORE;
+    for(int i = 0; i < 2; i++) {
+        message[1 + i] = 1 | (unsigned char) (score << 1); // 7 first bits of score (and 1 for padding)
+        score = ((unsigned int) score) >> 7; // Shift score to add next 7 bits
+    }
+    message[3] = '\0';
 }
 
+/*
+    Function to get the score value from a score-type message
+    message[1] and message[2] contains the score value (each 7 bits)
+    Params:
+        - char *message: buffer containing the message
+    Return:
+        - int value: score
+*/
 int msgS_score_get_value(char *message) {
-    int value;
-    sscanf(message + 1, "%d", &value);
+    int value = 0;
+    for(int i = 1; i >= 0; i--) { // Start from most significant segments
+        value <<= 7; // Left shift by 7 current value
+        value += ((unsigned char) message[1 + i]) >> 1; // Add next 7 bits
+    }
     return value;
 }

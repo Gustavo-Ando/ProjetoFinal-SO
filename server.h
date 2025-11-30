@@ -7,6 +7,10 @@
 
 #include "map.h"
 
+#define TIME_TO_COOK 5
+#define TIME_TO_BURN 14
+
+
 // Struct with data for a client
 typedef struct _client {
     int socket; // Socket index (0 if no connection)
@@ -34,6 +38,9 @@ typedef struct thread_arg_struct {
 
     int score; // Total score
     pthread_mutex_t score_mutex; // Mutex to acess score
+
+    int should_leave; // 1 if server should terminate
+    pthread_mutex_t leave_mutex; // Mutex to access shared should_leave variable
 
     struct sockaddr_in address; // Socket incoming address
 } THREAD_ARG_STRUCT;

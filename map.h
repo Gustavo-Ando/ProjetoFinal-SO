@@ -1,10 +1,10 @@
 #ifndef MAP_H
 #define MAP_H
 
-#include "config.h"
 #include <time.h>
+#include "utility.h"
 
-#define MAP_WIDTH 25
+#define MAP_WIDTH 19
 #define MAP_HEIGHT 10
 
 #define MAP_COLOR_DEFAULT 0
@@ -27,6 +27,9 @@
 #define NUMBER_COLOR_DEFAULT 20
 #define NUMBER_COLOR_WARNING 21
 #define NUMBER_COLOR_EMERGENCY 22
+#define NUMBER_COLOR_CUSTOMER_DEFAULT 23
+#define NUMBER_COLOR_CUSTOMER_WARNING 24
+#define NUMBER_COLOR_CUSTOMER_EMERGENCY 25
 
 #define PLAYERS_COLOR_CUSTOMER 30
 #define PLAYERS_COLOR_P1 31
@@ -45,46 +48,14 @@
 #define MAX_CUSTOMERS 4
 #define MAX_ORDER 3
 
-// Enum of item types and their rendered characters
-enum Item_type {
-    NONE,
-    BREAD,
-    SALAD,
-    JUICE,
-
-    HAMBURGER,
-    HAMBURGER_BURNED,
-    HAMBURGER_READY,
-
-    FRIES,
-    FRIES_READY,
-    FRIES_BURNED,
-
-    BURGER_BREAD = 11,
-    SALAD_BREAD = 12,
-    SALAD_BURGER = 13,
-    FULL_BURGER = 14,
-};
-
-enum Cook_status {
-    EMPTY = 'E',   // Empty oven (player can start oven)
-    COOKING = 'C', // Cooking food (cannot get item)
-    READY = 'R',   // Food ready (player can get item)
-    BURNED = 'B',  // Food burned (player can get burneed item)
-};
-
-enum Appliance_type {
-    APP_OVEN = 1,
-    APP_FRYER = 2,
-};
-
 typedef struct {
     int x, y; // Visual position (where changes character)
     int timer_x, timer_y;
     int time_left;
     enum Appliance_type type;
     enum Cook_status state;
-    time_t start_time;
+	struct timespec start_time;
+	int last_update_time;
     enum Item_type content;
 } APPLIANCE;
 
@@ -94,7 +65,6 @@ typedef struct {
 } COUNTER;
 
 typedef struct {
-    int id;
     int x, y; // Visual position (of the customer)
     int order_size;
     enum Item_type order[MAX_ORDER]; // Items ordered
@@ -102,7 +72,6 @@ typedef struct {
     int delivered;
     int active;
     int time_left;
-
 } CUSTOMER;
 
 // CLIENT
@@ -141,7 +110,5 @@ extern int customer_interaction_map[MAP_HEIGHT][MAP_WIDTH];
 
 int init_customers(CUSTOMER customers[MAX_CUSTOMERS]);
 int get_customer_id_at(int x, int y);
-
-enum Item_type try_combine(enum Item_type item1, enum Item_type item2);
 
 #endif

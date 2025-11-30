@@ -11,5 +11,6 @@ void broadcast_appliance_status(THREAD_ARG_STRUCT *thread_arg, int index);
 void broadcast_counter_update(THREAD_ARG_STRUCT *thread_arg, int counter_index);
 void broadcast_customer_update(THREAD_ARG_STRUCT *thread_arg, int customer_index);
 void broadcast_score(THREAD_ARG_STRUCT *thread_arg);
+void broadcast_disconnect(THREAD_ARG_STRUCT *thread_arg);
 
 #endif

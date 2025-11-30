@@ -6,7 +6,7 @@
 #include "message.h"
 #include "client_process_message.h"
 
-#define CUSTOMER_SPAWN_X  20
+#define CUSTOMER_SPAWN_X 20
 
 /*
     Function to process item message from server
@@ -128,14 +128,16 @@ void process_message_appliance(char *message, THREAD_ARG_STRUCT *thread_arg) {
     int index = msgS_appliance_get_index(message);
     int status = msgS_appliance_get_status(message);
     int time_left = msgS_appliance_get_time_left(message);
-    
+
+    // Access appliances' CR
     pthread_mutex_lock(&thread_arg->appliances_mutex);
 
+    // If the index is valid, update the app's state
     if (index >= 0 && index < thread_arg->num_appliances) {
         thread_arg->appliances[index].state = status;
         thread_arg->appliances[index].time_left = time_left;
 
-        // Update appliance's content
+        // Update appliance's content, checking it's type
         int is_oven = thread_arg->appliances[index].type == APP_OVEN;
         switch (status) {
             case EMPTY:
@@ -165,12 +167,14 @@ void process_message_appliance(char *message, THREAD_ARG_STRUCT *thread_arg) {
 */
 void process_message_counter(char *message, THREAD_ARG_STRUCT *thread_arg) {
 
-    // Get data
+    // Get info from message
     int index = msgS_counter_get_counter_index(message);
     int item = msgS_counter_get_item_type(message);
 
+    // Access counters' CR
     pthread_mutex_lock(&thread_arg->counters_mutex);
-
+    
+    // If it is a valid index, update it's content
     if (index >= 0 && index < thread_arg->num_counters) {
         thread_arg->counters[index].content = item;
     }
@@ -179,55 +183,42 @@ void process_message_counter(char *message, THREAD_ARG_STRUCT *thread_arg) {
 }
 
 /*
-
     Function to process customer arrival message from server
     Responsible for updating the customer data
     Params:
         - char *message: message received from server
         - THREAD_ARG_STRUCT *thread_arg: struct containing shared data
 */
+void process_message_customer(char *message, THREAD_ARG_STRUCT *thread_arg) {
 
-void process_message_customer(char *message, THREAD_ARG_STRUCT *thread_arg)
-{
+    // Get info from message
+    int id = msgS_customer_get_client_index(message);
+    int order_size = msgS_customer_get_order_size(message);
+	int state = msgS_customer_get_state(message);
+	int time_left = msgS_customer_get_time_left(message);
+    int *order = msgS_customer_get_order(message); 
 
-    int id = msgS_customer_arrival_get_client_index(message);
-    int order_size = msgS_customer_arrival_get_order_size(message);
-
-    int x = message[3 + order_size] - '0';
-    int y = message[4 + order_size] - '0';
-    int state = message[5 + order_size] - '0';
-    int time_left = message[6 + order_size] - '0';
-
-    int *order = msgS_customer_arrival_get_order(message); 
-
+    // Access customers' CR
     pthread_mutex_lock(&thread_arg->customers_mutex);
-
+    
+    // Get the struct from the thread_arg to make it easier
     CUSTOMER *c = &thread_arg->customers[id];
-    c->id = id;
 
-    // sets the position
-    c->x = x;
-    c->y = y;
-
-    // copies the order
+    // Copy the order
     c->order_size = order_size;
-    for (int i = 0; i < order_size && i < MAX_ORDER; i++) {
-        c->order[i] = (enum Item_type) order[i];
-    }
-    // if order_size < MAX_ORDER, fill the rest with NONE
-    for (int i = order_size; i < MAX_ORDER; i++) {
-        c->order[i] = NONE;
-    }
+    for (int i = 0; i < order_size && i < MAX_ORDER; i++) c->order[i] = (enum Item_type) order[i];
+    
+    // If order_size < MAX_ORDER, fill the rest with NONE
+    for (int i = order_size; i < MAX_ORDER; i++) c->order[i] = NONE;
 
-    // applies state and time left
+    // Update state and time left
     c->active = state;
     c->time_left = time_left;
 
-    // if the customer is not active, reset order
+    // If the customer is not active, reset order
     if (!c->active) {
         c->order_size = 0;
-        for (int i = 0; i < MAX_ORDER; i++) 
-            c->order[i] = NONE;
+        for (int i = 0; i < MAX_ORDER; i++) c->order[i] = NONE;
     }
 
     pthread_mutex_unlock(&thread_arg->customers_mutex);
@@ -243,15 +234,35 @@ void process_message_customer(char *message, THREAD_ARG_STRUCT *thread_arg)
         - THREAD_ARG_STRUCT *thread_arg: struct containing shared data
 */
 void process_message_score(char *message, THREAD_ARG_STRUCT *thread_arg) {
+    // Get info from message
     int new_score = msgS_score_get_value(message);
 
+    // Access score's CR to update it
     pthread_mutex_lock(&thread_arg->score_mutex);
     thread_arg->score = new_score;
     pthread_mutex_unlock(&thread_arg->score_mutex);
 
-    // Debug
+    // Access debug's CR
     pthread_mutex_lock(&thread_arg->debug_mutex);
-    sprintf(thread_arg->debug[thread_arg->current_debug_line], "SCORE: %d", new_score);
-    thread_arg->current_debug_line = (thread_arg->current_debug_line + 1) % 10;
+    sprintf(thread_arg->debug[thread_arg->current_debug_line], "SCORE: %d", new_score); // Add message
+    thread_arg->current_debug_line = (thread_arg->current_debug_line + 1) % 10;         // Update line
     pthread_mutex_unlock(&thread_arg->debug_mutex);
+}
+
+/*
+    Function to process connection messages
+    Responsible for terminating in disconnect
+    Params:
+        - char *message: message received from server
+        - THREAD_ARG_STRUCT *thread_arg: struct containing shared data
+*/
+void process_message_connection(char *message, THREAD_ARG_STRUCT *thread_arg) {
+    // Get info from message
+    int status = msgS_connection_get_status(message);
+    if(status == 1) return;
+    
+    // Access should_leave CR to update it
+    pthread_mutex_lock(&thread_arg->leave_mutex);
+    thread_arg->should_leave = 1;
+    pthread_mutex_unlock(&thread_arg->leave_mutex);
 }

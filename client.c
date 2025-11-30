@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,6 +9,7 @@
 #include <sys/socket.h>
 
 #include <unistd.h>
+#include <poll.h>
 
 #include "client.h"
 #include "client_process_message.h"
@@ -49,28 +49,43 @@ static void *curses(void *arg) {
     // Get input until enter is pressed
     int k = '\0';
     while (k != '\n') {
+        // Check if should terminate thread
+        pthread_mutex_lock(&thread_arg->leave_mutex);
+        int leave = thread_arg->should_leave;
+        pthread_mutex_unlock(&thread_arg->leave_mutex);
+        if(leave) break;
+        
         // Render map, players, itens, and debug info and then refresh screen
         erase();
         render_map(thread_arg, start_x, start_y);
         render_counters(thread_arg, start_x, start_y);
         render_appliances(thread_arg, start_x, start_y);
         render_players(thread_arg, start_x, start_y);
-        render_customers(thread_arg, start_x, start_y);
-        render_score(thread_arg, start_x, start_y);
+        render_customers(thread_arg, start_x, start_y, width);
+        render_score(thread_arg, start_x, start_y + MAP_HEIGHT + 1);
         render_debug(thread_arg);
         refresh();
 
-        // Get input (non-blocking due to nodelay()
+        // Get input (non-blocking due to nodelay())
         k = getch();
         if (k != ERR) { // If valid
-            // Access buffer CR and add content to the buffer of inputs
-            pthread_mutex_lock(&thread_arg->buffer_send_mutex);
-            if (thread_arg->buffer_send_size >= 64 - 1)
-                fail("Input buffer full");
-            thread_arg->buffer_send[thread_arg->buffer_send_size++] = k;
-            pthread_mutex_unlock(&thread_arg->buffer_send_mutex);
+            // Send message containing key to server
+            char message[MESSAGE_SIZE] = {0};
+            msgC_input(message, k);
+            send_message(thread_arg->client_fd, message);
         }
     }
+
+    // Clear screen
+    erase();
+    refresh();
+    endwin();
+    
+    // Pressed enter, game should terminate
+    pthread_mutex_lock(&thread_arg->leave_mutex);
+    thread_arg->should_leave = 1;
+    pthread_mutex_unlock(&thread_arg->leave_mutex);
+    
     return NULL;
 }
 
@@ -86,10 +101,25 @@ static void *socket_read_thread(void *arg) {
     THREAD_ARG_STRUCT *thread_arg = (THREAD_ARG_STRUCT *)arg; 
     
     // Enlarged buffer to handle fragmentation and multiple messages
-    char buffer[MESSAGE_SIZE * 4]; 
+    char buffer[MESSAGE_SIZE * 32]; 
     int stored_bytes = 0; // Bytes currently kept in buffer
 
+    // Create pollfd to poll if socket can be read
+    struct pollfd pollfds;
+    pollfds.fd = thread_arg->client_fd;
+    pollfds.events = POLLIN;
     while (1) {
+        // Check if should terminate thread
+        pthread_mutex_lock(&thread_arg->leave_mutex);
+        int leave = thread_arg->should_leave;
+        pthread_mutex_unlock(&thread_arg->leave_mutex);
+        if(leave) break;
+        
+        // Poll socket with 1 second of timeout, restarting loop if timeout or error to check if should terminate
+        int poll_timeout = 0.25 * 1000; // In msec
+        if (poll(&pollfds, 1, poll_timeout) == 0) continue; // If timeout 
+        else if(pollfds.revents != POLLIN) continue; // Error
+        
         // Calculate available space in buffer
         int bytes_to_read = (sizeof(buffer) - 1) - stored_bytes;
         
@@ -115,21 +145,19 @@ static void *socket_read_thread(void *arg) {
                 processed_bytes++;
                 continue;
             }
+            // If there are no bytes left to process, break
             int remaining_bytes = stored_bytes - processed_bytes;
-
             if (remaining_bytes < 1) break;
 
+            // If the message length s 
             int msg_len = msg_get_size(current_msg);
-
             if (msg_len <= 0) {
                 // Plus one byte and try to find the next
                 processed_bytes++;
                 continue;
             }
             // If message is incomplete, stop and wait for the rest
-            if (msg_len > remaining_bytes) {
-                break;
-            }
+            if (msg_len > remaining_bytes) break;
 
             // Route message to correct handler
             switch (msg_get_type(current_msg)) {
@@ -157,6 +185,9 @@ static void *socket_read_thread(void *arg) {
                 case MSG_SCORE:
                     process_message_score(current_msg, thread_arg);
                     break;
+                case MSG_CONNECTION:
+                    process_message_connection(current_msg, thread_arg);
+                    break;
                 default:
                     break;
             }
@@ -178,42 +209,6 @@ static void *socket_read_thread(void *arg) {
     return NULL;
 }
 
-/*
-    Thread to write a message
-    Responsible for writing and sending a message to the server
-    Params:
-        - void *arg (THREAD_ARG_STRUCT): struct containing info about players and buffer to send
-    Return:
-        -
-*/
-static void *socket_write_thread(void *arg) {
-    THREAD_ARG_STRUCT *thread_arg = (THREAD_ARG_STRUCT *)arg; // Cast
-    char message[MESSAGE_SIZE] = {0};
-
-    // Repeat
-    while (1) {
-        int to_send = 0;
-        // Access buffer CR
-        pthread_mutex_lock(&thread_arg->buffer_send_mutex);
-        // If there is key on buffer, remove and add to message
-        if (thread_arg->buffer_send_size >= 1) {
-            msgC_input(message, thread_arg->buffer_send[0]);
-            // Shift the buffer to get next key
-            for (int i = 0; i < thread_arg->buffer_send_size - 1; i++) {
-                thread_arg->buffer_send[i] = thread_arg->buffer_send[i + 1];
-            }
-            // Update buffer size and signal there's something to send
-            thread_arg->buffer_send_size--;
-            to_send = 1;
-        }
-        pthread_mutex_unlock(&thread_arg->buffer_send_mutex);
-
-        // If there is a msg to send, send after leaving CR
-        if (to_send) send_message(thread_arg->client_fd, message);
-    }
-    return NULL;
-}
-
 int main(int argc, char **argv) {
     // Creates the client socket
     int client_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -225,34 +220,34 @@ int main(int argc, char **argv) {
     server_addr.sin_port = htons(PORT);
 
     // Convert the addr to binary
-    if (inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr) <= 0) fail("IP address error\n");
+    char ip_string[16];
+    if(argc >= 2) strncpy(ip_string, argv[1], 16);
+    else strcpy(ip_string, "127.0.0.1"); // localhost
+    if (inet_pton(AF_INET, ip_string, &server_addr.sin_addr) <= 0) fail("IP address error\n");
 
     // Connect client and server
     int status = connect(client_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
     if (status < 0) fail("Connection error\n");
 
-    // Send a message confirming the connection
-    char message[MESSAGE_SIZE];
-    msgC_connection(message, 1);
-    send_message(client_fd, message);
-
     // Initialize thread arguments
     THREAD_ARG_STRUCT *thread_arg = malloc(sizeof(THREAD_ARG_STRUCT));
-    thread_arg->buffer_send_size = 0;
     thread_arg->num_players = 0;
     thread_arg->num_customers = 0;
     thread_arg->current_debug_line = 0;
     thread_arg->client_fd = client_fd;
     thread_arg->score = 0;
+    thread_arg->should_leave = 0;
+    if(argc >= 3 && strcmp(argv[2], "-debug") == 0) thread_arg->render_debug = 1;
+    else thread_arg->render_debug = 0;
 
     //inicialize all mutex
-    pthread_mutex_init(&thread_arg->buffer_send_mutex, NULL);
     pthread_mutex_init(&thread_arg->players_mutex, NULL);
     pthread_mutex_init(&thread_arg->debug_mutex, NULL);
     pthread_mutex_init(&thread_arg->appliances_mutex, NULL);
     pthread_mutex_init(&thread_arg->counters_mutex, NULL);
     pthread_mutex_init(&thread_arg->customers_mutex, NULL);
     pthread_mutex_init(&thread_arg->score_mutex, NULL);
+    pthread_mutex_init(&thread_arg->leave_mutex, NULL);
 
     // Initialize all players
     for (int i = 0; i < MAX_PLAYERS; i++) {
@@ -276,7 +271,6 @@ int main(int argc, char **argv) {
 
     //Inicialize score
     thread_arg->score = 0;
-    pthread_mutex_init(&thread_arg->score_mutex, NULL);
 
     // Initialize debug
     for (int i = 0; i < 10; i++) {
@@ -284,14 +278,12 @@ int main(int argc, char **argv) {
     }
 
     // Create threads to send and receive data
-    pthread_t read_thr, write_thr, curses_thr;
+    pthread_t read_thr, curses_thr;
     pthread_create(&read_thr, NULL, socket_read_thread, thread_arg);
-    pthread_create(&write_thr, NULL, socket_write_thread, thread_arg);
     pthread_create(&curses_thr, NULL, curses, thread_arg);
 
     // Wait for them to finish
     pthread_join(read_thr, NULL);
-    pthread_join(write_thr, NULL);
     pthread_join(curses_thr, NULL);
 
     // Free space

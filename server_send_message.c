@@ -1,6 +1,5 @@
 #include <pthread.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "server_send_message.h"
 #include "utility.h"
@@ -40,7 +39,7 @@ void send_game_state(THREAD_ARG_STRUCT *thread_arg, int index) {
     }
     pthread_mutex_unlock(&thread_arg->clients_mutex);
 
-    // Send appliance data
+    // Send appliance data (access both clients' and apps' CR)
     mutex_lock_both(&thread_arg->appliances_mutex, &thread_arg->clients_mutex);
     for(int i = 0; i < thread_arg->num_appliances; i++){
         int status = thread_arg->appliances[i].state;
@@ -51,10 +50,9 @@ void send_game_state(THREAD_ARG_STRUCT *thread_arg, int index) {
     }
     mutex_unlock_both(&thread_arg->appliances_mutex, &thread_arg->clients_mutex);
 
-    // Send counter data
+    // Send counter data (access both counters' and clients' CR)
     mutex_lock_both(&thread_arg->counters_mutex, &thread_arg->clients_mutex);
     for(int i = 0; i < thread_arg->num_counters; i++){
-        printf("Send counter %d\n", i);
         enum Item_type item = thread_arg->counters[i].content;
         msgS_counter(message, i, item);
         
@@ -62,43 +60,22 @@ void send_game_state(THREAD_ARG_STRUCT *thread_arg, int index) {
     }
     mutex_unlock_both(&thread_arg->counters_mutex, &thread_arg->clients_mutex);
 
-    // Send customer data
-    
-    // Send customer data
+    // Send customer data (access both customers' and clients' CR)
     mutex_lock_both(&thread_arg->customers_mutex, &thread_arg->clients_mutex);
 
     for (int i = 0; i < thread_arg->num_customers; i++) {
 
-        // Pula customers inativos
+        // Skip inactive customers
         if (!thread_arg->customers[i].active)
             continue;
 
         CUSTOMER *c = &thread_arg->customers[i];
-
-        int customer_id = c->id;
-        enum Item_type *order = c->order;
-        int order_size = c->order_size;
-
-        int x = c->x;
-        int y = c->y;
-        int state = c->active;  
-        int time_left = c->time_left;
-
-        msgS_customer(
-            message,
-            customer_id,
-            order,
-            order_size,
-            x,
-            y,
-            state,
-            time_left
-        );
+        msgS_customer(message, i, c->order, c->order_size, c->active, c->time_left);
 
         send_message(thread_arg->clients[index].socket, message);
     }
 
-    //Send score data
+    //Send score data (access score CR)
     pthread_mutex_lock(&thread_arg->score_mutex);
     int s = thread_arg->score;
     pthread_mutex_unlock(&thread_arg->score_mutex);
@@ -190,15 +167,17 @@ void broadcast_player_item(THREAD_ARG_STRUCT *thread_arg, int index) {
         -
 */
 void broadcast_appliance_status(THREAD_ARG_STRUCT *thread_arg, int index){
-    
+    // Access app's CR
     pthread_mutex_lock(&thread_arg->appliances_mutex);
+    // Get app info
     int status = thread_arg->appliances[index].state;
     int time_left = thread_arg->appliances[index].time_left;
-
+    // Create a message with it
     char message[MESSAGE_SIZE];
     msgS_appliance(message, index, status, time_left);
     pthread_mutex_unlock(&thread_arg->appliances_mutex);
     
+    // Access clients' CR and send them the message
     pthread_mutex_lock(&thread_arg->clients_mutex);
     for(int i = 0; i < MAX_PLAYERS; i++){
         if(thread_arg->clients[i].socket != 0) {
@@ -217,21 +196,22 @@ void broadcast_appliance_status(THREAD_ARG_STRUCT *thread_arg, int index){
         -
 */
 void broadcast_counter_update(THREAD_ARG_STRUCT *thread_arg, int counter_index) {
+    // Access counters' CR
     pthread_mutex_lock(&thread_arg->counters_mutex);
-
-    char message[MESSAGE_SIZE];
+    // Get counter's content
     enum Item_type item = thread_arg->counters[counter_index].content;
-
+    // Create a message with it
+    char message[MESSAGE_SIZE];
     msgS_counter(message, counter_index, item);
     pthread_mutex_unlock(&thread_arg->counters_mutex);
 
+    // Access clients' CR and send them the message
     pthread_mutex_lock(&thread_arg->clients_mutex);
     for (int i = 0; i < MAX_PLAYERS; i++) {
         if (thread_arg->clients[i].socket != 0) {
             send_message(thread_arg->clients[i].socket, message);
         }
     }
-
     pthread_mutex_unlock(&thread_arg->clients_mutex);
 }
 
@@ -243,50 +223,59 @@ void broadcast_counter_update(THREAD_ARG_STRUCT *thread_arg, int counter_index) 
     Return:
         -
 */
-void broadcast_customer_update(THREAD_ARG_STRUCT *thread_arg, int customer_index)
-{
+void broadcast_customer_update(THREAD_ARG_STRUCT *thread_arg, int customer_index) {
     char message[MESSAGE_SIZE];
 
-    // Lock customers
+    // Access customers' CR
     pthread_mutex_lock(&thread_arg->customers_mutex);
-
     CUSTOMER *c = &thread_arg->customers[customer_index];
-
-    msgS_customer(
-        message,
-        c->id,
-        c->order,
-        c->order_size,
-        c->x,
-        c->y,
-        c->active,
-        c->time_left
-    );
-
+    // Create a message with customer's info
+    msgS_customer(message, customer_index, c->order, c->order_size, c->active, c->time_left);
     pthread_mutex_unlock(&thread_arg->customers_mutex);
 
-    // Lock clients and broadcast to all connected players
+    // Access clients' CR and send them the message
     pthread_mutex_lock(&thread_arg->clients_mutex);
-
     for (int i = 0; i < MAX_PLAYERS; i++) {
         if (thread_arg->clients[i].socket != 0) {
             send_message(thread_arg->clients[i].socket, message);
         }
     }
-
     pthread_mutex_unlock(&thread_arg->clients_mutex);
 }
 
 
 void broadcast_score(THREAD_ARG_STRUCT *thread_arg) {
-    char message[MESSAGE_SIZE];
-    
+    // Access score's CR
     pthread_mutex_lock(&thread_arg->score_mutex);
     int current_score = thread_arg->score;
     pthread_mutex_unlock(&thread_arg->score_mutex);
-
+    // Create a message with score's value
+    char message[MESSAGE_SIZE];
     msgS_score(message, current_score);
 
+    // Access clients' CR and send them the message
+    pthread_mutex_lock(&thread_arg->clients_mutex);
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        if (thread_arg->clients[i].socket != 0) {
+            send_message(thread_arg->clients[i].socket, message);
+        }
+    }
+    pthread_mutex_unlock(&thread_arg->clients_mutex);
+}
+
+/*
+    Function to broadcast to all clients a disconnection
+    Params:
+        - THREAD_ARG_STRUCT *thread_arg: shared game state
+    Return:
+        -
+*/
+void broadcast_disconnect(THREAD_ARG_STRUCT *thread_arg) {
+    // Create the disconnection message
+    char message[MESSAGE_SIZE];
+    msgS_connection(message, 0);
+    
+    // Access clients' CR and send them the message
     pthread_mutex_lock(&thread_arg->clients_mutex);
     for (int i = 0; i < MAX_PLAYERS; i++) {
         if (thread_arg->clients[i].socket != 0) {
